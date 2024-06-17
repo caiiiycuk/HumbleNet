@@ -3,7 +3,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
 
 if(HUMBLENET_NATIVE)
 	list(APPEND PLATFORM_LIBRARIES
-		webrtc_microstack websockets
+		webrtc_microstack websockets ssl crypto
 		${CMAKE_THREAD_LIBS_INIT}
 	)
 endif()

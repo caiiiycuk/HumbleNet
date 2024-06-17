@@ -26,7 +26,7 @@ struct internal_socket_t {
 	internal_callbacks_t callbacks;
 	
 	// web socket connection info
-	struct libwebsocket *wsi;
+	struct lws *wsi;
 	std::string url;
 	
 	// webrtc connection info
@@ -58,7 +58,7 @@ struct internal_context_t {
 	std::vector<std::string> stunServerList;
 	
 	// websocket
-	struct libwebsocket_context *websocket;
+	struct lws_context *websocket;
 
 	// webrtc
 	struct libwebrtc_context* webrtc;
@@ -66,9 +66,8 @@ struct internal_context_t {
 
 static internal_context_t* g_context;
 
-int websocket_protocol(struct libwebsocket_context *context
-					   , struct libwebsocket *wsi
-					   , enum libwebsocket_callback_reasons reason
+int websocket_protocol(  struct lws *wsi
+					   , enum lws_callback_reasons reason
 					   , void *user, void *in, size_t len) {
 
 //	LOG("%p %p %d %p\n", context, wsi, reason, user );
@@ -253,7 +252,7 @@ int webrtc_protocol(struct libwebrtc_context *context,
 
 #define MAX_PROTOCOLS 16
 
-struct libwebsocket_protocols protocols[MAX_PROTOCOLS] = {
+struct lws_protocols protocols[MAX_PROTOCOLS] = {
 	{ "default", websocket_protocol, sizeof(internal_socket_t) }
 	,{ NULL, NULL, 0 }
 };
@@ -307,7 +306,7 @@ internal_context_t* internal_init(internal_callbacks_t* callbacks) {
 #endif
 #endif
 
-	ctx->websocket = libwebsocket_create_context_extended(&info);
+	ctx->websocket = lws_create_context_extended(&info);
 	ctx->webrtc = libwebrtc_create_context(&webrtc_protocol);
 
 	g_context = ctx;
@@ -346,21 +345,20 @@ void internal_register_protocol( internal_context_t* ctx, const char* name, inte
 	ctx->protocols.insert( std::make_pair( std::string(name), cb ) );
 	// TODO: Sanatize callbacks
 
-	libwebsocket_protocols* protocol = protocols + ctx->protocols.size();
+	lws_protocols* protocol = protocols + ctx->protocols.size();
 	// make sure the next protocols is "empty"
 	*(protocol + 1) = *protocol;
 	// now copy the prior record
 	*protocol = *(protocol-1);
 	// and update the name
 	protocol->name = name;
-	protocol->protocol_index++;
 }
 
 void internal_deinit(internal_context_t* ctx) {
 	// how to destroy connection factory
 	if (!ctx) return;
 
-	libwebsocket_context_destroy( ctx->websocket );
+	lws_context_destroy( ctx->websocket );
 	if( ctx->webrtc )
 		libwebrtc_destroy_context( ctx->webrtc );
 
@@ -378,7 +376,7 @@ void * internal_get_data(internal_socket_t* socket ) {
 internal_socket_t* internal_connect_websocket( const char *server_addr, const char* protocol ) {
 	internal_socket_t* socket = new internal_socket_t(true);
 
-	socket->wsi = libwebsocket_client_connect_extended(g_context->websocket, server_addr, protocol, socket );
+	socket->wsi = lws_client_connect_extended(g_context->websocket, server_addr, protocol, socket );
 	if (socket->wsi == NULL) {
 		delete socket;
 		return NULL;
@@ -455,7 +453,7 @@ void internal_close_socket( internal_socket_t* socket ) {
 		// socket clos process has already started, ignore the request.
 		return;
 	else if( socket->wsi ) {
-		libwebsocket_callback_on_writable(g_context->websocket, socket->wsi);
+		lws_callback_on_writable(socket->wsi);
 		// TODO: How do we clean up ?
 	} else if( socket->webrtc ) {
 		// this will trigger the destruction of the channel and thus the destruction of our socket object.
@@ -471,19 +469,19 @@ int internal_write_socket(internal_socket_t* socket, const void *buf, int bufsiz
 		// TODO: Should this buffer the data like the docuemntation states and only write on the writable callback ?
 		
 #if LWS_SEND_BUFFER_PRE_PADDING == 0 && LWS_SEND_BUFFER_POST_PADDING == 0
-		int retval = libwebsocket_write(socket->wsi, buf, bufsize, LWS_WRITE_BINARY);
+		int retval = lws_write(socket->wsi, buf, bufsize, LWS_WRITE_BINARY);
 #else
 		// libwebsocket requires the caller to allocate the frame prefix/suffix storage.
 		std::vector<unsigned char> sendbuf(LWS_SEND_BUFFER_PRE_PADDING + bufsize + LWS_SEND_BUFFER_POST_PADDING, 0);
 		memcpy(&sendbuf[LWS_SEND_BUFFER_PRE_PADDING], buf, bufsize);
 
-		int retval = libwebsocket_write(socket->wsi, &sendbuf[LWS_SEND_BUFFER_PRE_PADDING], bufsize, LWS_WRITE_BINARY);
+		int retval = lws_write(socket->wsi, &sendbuf[LWS_SEND_BUFFER_PRE_PADDING], bufsize, LWS_WRITE_BINARY);
 #endif
 		
 		// mark it non-writable and tell websocket to inform us when it's writable again
 		//connection->writable = false;
 		if( retval > 0 ) {
-			libwebsocket_callback_on_writable(g_context->websocket, socket->wsi);
+			lws_callback_on_writable(socket->wsi);
 		}
 
 		return retval;

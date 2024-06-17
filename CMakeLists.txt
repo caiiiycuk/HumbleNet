@@ -76,7 +76,7 @@ if(HUMBLENET_NATIVE)
 	include(ExternalProject)
 	include(SelectLibraryConfigurations)
 	if(APPLE OR WIN32 OR LINUX)
-		set(DEFAULT_USE_BORING_SSL ON)
+		set(DEFAULT_USE_BORING_SSL OFF)
 	endif()
 	option(USE_BORINGSSL "Use BoringSSL instead of OpenSSL" ${DEFAULT_USE_BORING_SSL})
 

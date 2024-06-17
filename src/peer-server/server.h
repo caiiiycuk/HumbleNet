@@ -7,18 +7,18 @@
 #include <string>
 #include <memory>
 
-struct libwebsocket_context;
-struct libwebsocket;
+struct lws_context;
+struct lws;
 
 namespace humblenet {
 	class GameDB;
 
 	struct Server {
-		struct libwebsocket_context *context;
+		struct lws_context *context;
 
 		// we need to be able to lookup connections on both
 		// websocket (for the receive callback) and peer id (when sending stuff)
-		std::unordered_map<struct libwebsocket *, std::unique_ptr<P2PSignalConnection> > signalConnections;
+		std::unordered_map<struct lws *, std::unique_ptr<P2PSignalConnection> > signalConnections;
 
 		std::unordered_map<GameId, std::unique_ptr<Game> > games;
 
@@ -29,7 +29,7 @@ namespace humblenet {
 
 		Game *getVerifiedGame(const HumblePeer::HelloServer* hello);
 		void populateStunServers(std::vector<ICEServer>& servers);
-		void triggerWrite(struct libwebsocket* wsi);
+		void triggerWrite(struct lws* wsi);
 
 	private:
 		std::shared_ptr<GameDB> m_gameDB;

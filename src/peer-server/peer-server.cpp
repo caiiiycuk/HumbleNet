@@ -55,9 +55,8 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 	return reinterpret_cast<P2PSignalConnection *>(user_data)->processMsg(msg);
 }
 
-int callback_default(struct libwebsocket_context *context
-				  , struct libwebsocket *wsi
-				  , enum libwebsocket_callback_reasons reason
+int callback_default(struct lws *wsi
+				  , enum lws_callback_reasons reason
 				  , void *user, void *in, size_t len) {
 
 
@@ -104,7 +103,7 @@ int callback_default(struct libwebsocket_context *context
 		break;
 
 	default:
-		LOG_WARNING("callback_default %p %p %u %p %p %u\n", context, wsi, reason, user, in, len);
+		LOG_WARNING("callback_default %p %u %p %p %u\n", wsi, reason, user, in, len);
 		break;
 	}
 
@@ -112,9 +111,8 @@ int callback_default(struct libwebsocket_context *context
 }
 
 
-int callback_humblepeer(struct libwebsocket_context *context
-				  , struct libwebsocket *wsi
-				  , enum libwebsocket_callback_reasons reason
+int callback_humblepeer(struct lws *wsi
+				  , enum lws_callback_reasons reason
 				  , void *user, void *in, size_t len) {
 
 
@@ -131,7 +129,7 @@ int callback_humblepeer(struct libwebsocket_context *context
 			std::vector<char> ipstr(bufsize, 0);
 			int port;
 
-			int socket = libwebsocket_get_socket_fd(wsi);
+			int socket = lws_get_socket_fd(wsi);
 			getpeername(socket, (struct sockaddr*)&addr, &len);
 
 			if (addr.ss_family == AF_INET) {
@@ -237,7 +235,7 @@ int callback_humblepeer(struct libwebsocket_context *context
 			size_t bufsize = conn->sendBuf.size();
 			std::vector<unsigned char> sendbuf(LWS_SEND_BUFFER_PRE_PADDING + bufsize + LWS_SEND_BUFFER_POST_PADDING, 0);
 			memcpy(&sendbuf[LWS_SEND_BUFFER_PRE_PADDING], &conn->sendBuf[0], bufsize);
-			int retval = libwebsocket_write(conn->wsi, &sendbuf[LWS_SEND_BUFFER_PRE_PADDING], bufsize, LWS_WRITE_BINARY);
+			int retval = lws_write(conn->wsi, &sendbuf[LWS_SEND_BUFFER_PRE_PADDING], bufsize, LWS_WRITE_BINARY);
 			if (retval < 0) {
 				// error while sending, close the connection
 				return -1;
@@ -247,7 +245,7 @@ int callback_humblepeer(struct libwebsocket_context *context
 			conn->sendBuf.erase(conn->sendBuf.begin(), conn->sendBuf.begin() + retval);
 			// check if it was only partial
 			if (!conn->sendBuf.empty()) {
-				libwebsocket_callback_on_writable(context, conn->wsi);
+				lws_callback_on_writable(conn->wsi);
 			}
 		}
 		break;
@@ -263,7 +261,7 @@ int callback_humblepeer(struct libwebsocket_context *context
 		break;
 
 	default:
-		LOG_WARNING("callback_humblepeer %p %p %u %p %p %u\n", context, wsi, reason, user, in, len);
+		LOG_WARNING("callback_humblepeer %p %u %p %p %u\n", wsi, reason, user, in, len);
 		break;
 	}
 
@@ -272,7 +270,7 @@ int callback_humblepeer(struct libwebsocket_context *context
 
 
 // TODO: would one callback be enough?
-struct libwebsocket_protocols protocols[] = {
+struct lws_protocols protocols[] = {
 	  { "default", callback_default, 1 }
 	, { "humblepeer", callback_humblepeer, 1 }
 	, { NULL, NULL, 0 }
@@ -388,7 +386,7 @@ int main(int argc, char *argv[]) {
 	WS_OPT(ssl_cipher_list, config.sslCipherList);
 #undef WS_OPT
 
-	peerServer->context = libwebsocket_create_context(&info);
+	peerServer->context = lws_create_context(&info);
 	if (peerServer->context == NULL) {
 		// TODO: error message
 		exit(1);
@@ -398,7 +396,7 @@ int main(int argc, char *argv[]) {
 		// use timeout so we will eventually process signals
 		// but relatively long to reduce CPU load
 		// TODO: configurable timeout
-		libwebsocket_service(peerServer->context, 200);
+		lws_service(peerServer->context, 200);
 	}
 
 	peerServer.reset();

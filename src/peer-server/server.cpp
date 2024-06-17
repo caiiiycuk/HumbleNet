@@ -74,9 +74,9 @@ namespace humblenet {
 		return it->second.get();
 	}
 
-	void Server::triggerWrite(struct libwebsocket *wsi)
+	void Server::triggerWrite(struct lws *wsi)
 	{
-		libwebsocket_callback_on_writable(context, wsi);
+		lws_callback_on_writable(wsi);
 	}
 
 	void Server::populateStunServers(std::vector<ICEServer> &servers)

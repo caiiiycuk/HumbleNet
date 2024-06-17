@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <string>
+#include <assert.h>
 
 // Stupid hack - libwebsockets uses its own POLL defines on Windows
 #ifdef _WIN32
@@ -21,11 +22,11 @@
 
 #define LOG printf
 
-static_assert(sizeof(libwebsocket_pollfd) == sizeof(pollfd), "pollfd struct size mismatch!");
+static_assert(sizeof(lws_pollfd) == sizeof(pollfd), "pollfd struct size mismatch!");
 
 struct LibWebSocket_Module : public poll_module_t {
 
-	LibWebSocket_Module(libwebsocket_protocols* protocols) {
+	LibWebSocket_Module(lws_protocols* protocols) {
 		PreSelect = (poll_pre_select)&OnPreSelect;
 		PostSelect = (poll_post_select)&OnPostSelect;
 		Destroy = (poll_pre_destroy)OnPreDestroy;
@@ -42,9 +43,9 @@ struct LibWebSocket_Module : public poll_module_t {
 
 	}
 
-	int callback(struct libwebsocket_context *context
-						   , struct libwebsocket *wsi
-						   , enum libwebsocket_callback_reasons reason
+	int callback(struct lws_context *context
+						   , struct lws *wsi
+						   , enum lws_callback_reasons reason
 						   , void *user, void *in, size_t len) {
 		switch (reason) {
 			case LWS_CALLBACK_PROTOCOL_INIT: {
@@ -52,9 +53,9 @@ struct LibWebSocket_Module : public poll_module_t {
 			} break;
 
 			case LWS_CALLBACK_ADD_POLL_FD: {
-				struct libwebsocket_pollargs *pa = (struct libwebsocket_pollargs *)in;
+				struct lws_pollargs *pa = (struct lws_pollargs *)in;
 
-				struct libwebsocket_pollfd newfd;
+				struct lws_pollfd newfd;
 				memset(&newfd, 0, sizeof(newfd));
 				newfd.fd = pa->fd;
 				newfd.events = pa->events;
@@ -67,7 +68,7 @@ struct LibWebSocket_Module : public poll_module_t {
 			} break;
 
 			case LWS_CALLBACK_DEL_POLL_FD: {
-				struct libwebsocket_pollargs *pa = (struct libwebsocket_pollargs *)in;
+				struct lws_pollargs *pa = (struct lws_pollargs *)in;
 
 				// TODO: more efficient lookup
 				for (unsigned int i = 0; i < pollfds.size(); i++) {
@@ -84,7 +85,7 @@ struct LibWebSocket_Module : public poll_module_t {
 			} break;
 
 			case LWS_CALLBACK_CHANGE_MODE_POLL_FD: {
-				struct libwebsocket_pollargs *pa = (struct libwebsocket_pollargs *)in;
+				struct lws_pollargs *pa = (struct lws_pollargs *)in;
 				// TODO: more efficient lookup
 				for (unsigned int i = 0; i < pollfds.size(); i++) {
 					if (pollfds[i].fd == pa->fd) {
@@ -104,14 +105,14 @@ struct LibWebSocket_Module : public poll_module_t {
 			default:
 				break;
 		}
-		return !delegate ? 0 : delegate(context,wsi,reason,user,in,len);
+		return !delegate ? 0 : delegate(wsi,reason,user,in,len);
 	}
 
 private:
-	libwebsocket_context* context;
-	libwebsocket_protocols* protocols;
-	callback_function* delegate;
-	std::vector<struct libwebsocket_pollfd> pollfds;
+	lws_context* context;
+	lws_protocols* protocols;
+	lws_callback_function* delegate;
+	std::vector<struct lws_pollfd> pollfds;
 
 	static void OnPreSelect(LibWebSocket_Module* self, fd_set* readset, fd_set* writeset, fd_set* errorset, int* blocktime ) {
 		// Add all the websocket FDs.
@@ -139,12 +140,12 @@ private:
 				pollfd.revents = (FD_ISSET(pollfd.fd, readset) ? LWS_POLLIN : 0)
 				| (FD_ISSET(pollfd.fd, writeset) ? LWS_POLLOUT : 0)
 				| (FD_ISSET(pollfd.fd, errorset) ? LWS_POLLHUP : 0);
-				retval = libwebsocket_service_fd(self->context, &pollfd);
+				retval = lws_service_fd(self->context, &pollfd);
 				if (retval < 0) {
-					LOG("error in libwebsocket_service_fd: %d\n", retval);
+					LOG("error in lws_service_fd: %d\n", retval);
 					// keep going... TODO: should we?
 				} else if (pollfd.revents != 0) {
-					LOG("error: libwebsocket_service_fd thinks it's not our socket\n");
+					LOG("error: lws_service_fd thinks it's not our socket\n");
 				}
 
 				// if we ve already found that number of matches bail
@@ -156,48 +157,47 @@ private:
 
 	static void OnPreDestroy( LibWebSocket_Module* self ) {
 		// replace the original protocol callback
-		for( libwebsocket_protocols* p = self->protocols; p && p->name; ++p )
+		for( lws_protocols* p = self->protocols; p && p->name; ++p )
 		{
 			if( p->callback == InterceptCallback )
 				p->callback = self->delegate;
 		}
 	}
 
-	static int InterceptCallback(struct libwebsocket_context *context
-							 , struct libwebsocket *wsi
-							 , enum libwebsocket_callback_reasons reason
+	static int InterceptCallback(struct lws *wsi
+							 , enum lws_callback_reasons reason
 							 , void *user, void *in, size_t len){
-
-		LibWebSocket_Module* module = (LibWebSocket_Module*)libwebsocket_context_user( context );
+		struct lws_context *context = lws_get_context(wsi);
+		LibWebSocket_Module* module = (LibWebSocket_Module*)lws_context_user( context );
 
 		return module->callback( context, wsi, reason, user, in, len );
 	}
 };
 
-static int poll_extension_callback(struct libwebsocket_context *context,
-										  struct libwebsocket_extension *ext,
-										  struct libwebsocket *wsi,
-										  enum libwebsocket_extension_callback_reasons reason,
+static int poll_extension_callback(struct lws_context *context,
+										  const struct lws_extension *ext,
+										  struct lws *wsi,
+										  enum lws_extension_callback_reasons reason,
 										  void *user, void *in, size_t len)
 {
-	LibWebSocket_Module* module = (LibWebSocket_Module*)libwebsocket_context_user( context );
-	if( reason == LWS_EXT_CALLBACK_SERVER_CONTEXT_DESTRUCT ) {
+	LibWebSocket_Module* module = (LibWebSocket_Module*)lws_context_user( context );
+	if( reason == LWS_EXT_CB_DESTROY ) {
 		poll_destroy_module( module );
 	}
 
 	return 0;
 }
 
-static libwebsocket_extension poll_extension[] = {
-	{ "poll", &poll_extension_callback, 0, NULL }
-	,{ NULL, NULL, 0, NULL }
+static lws_extension poll_extension[] = {
+	{ "poll", &poll_extension_callback, 0, }
+	,{ NULL, NULL, 0, }
 };
 
 
-struct libwebsocket_context* libwebsocket_create_context_extended( lws_context_creation_info* info ) {
+struct lws_context* lws_create_context_extended( lws_context_creation_info* info ) {
 	assert( info->user == NULL );
 
-	LibWebSocket_Module* module = new (malloc(sizeof(LibWebSocket_Module))) LibWebSocket_Module(info->protocols);
+	LibWebSocket_Module* module = new (malloc(sizeof(LibWebSocket_Module))) LibWebSocket_Module(const_cast<lws_protocols*>(info->protocols));
 	info->user = module;
 	// hook in our default protocol handler (will delegate to the user provided)
 	info->extensions = poll_extension;
@@ -206,7 +206,7 @@ struct libwebsocket_context* libwebsocket_create_context_extended( lws_context_c
 	poll_init();
 	poll_add_module( module );
 
-	return libwebsocket_create_context(info);
+	return lws_create_context(info);
 }
 
 
@@ -273,7 +273,7 @@ bool parseServerAddress(std::string server_string, std::string &realaddr, std::s
 	return true;
 }
 
-struct libwebsocket* libwebsocket_client_connect_extended(struct libwebsocket_context* context, const char* url, const char* protocol, void* user_data ) {
+struct lws* lws_client_connect_extended(struct lws_context* context, const char* url, const char* protocol, void* user_data ) {
 	std::string realaddr;
 	int port = 0;
 	std::string path;
@@ -283,11 +283,20 @@ struct libwebsocket* libwebsocket_client_connect_extended(struct libwebsocket_co
 	if (!parseServerAddress(server_string, realaddr, path, port, use_ssl)) {
 		return NULL;
 	}
+	struct lws_client_connect_info ccinfo = {
+		.context = context,
+		.address = realaddr.c_str(),
+		.port = port,
+		.ssl_connection = use_ssl,
+		.path = path.c_str(),
+		.host = realaddr.c_str(),
+		.origin = realaddr.c_str(),
+		.protocol = protocol,
+		.userdata = user_data,
+	};
 
-	return libwebsocket_client_connect_extended(context, realaddr.c_str(), port
-												, use_ssl, path.c_str(), realaddr.c_str()
-												, realaddr.c_str(), protocol
-												, -1, user_data);
+	// Establish the connection
+	return lws_client_connect_via_info(&ccinfo);
 }
 
 #endif

@@ -13,7 +13,7 @@
 extern "C" {
 #endif
 
-enum libwebsocket_callback_reasons {
+enum lws_callback_reasons {
     LWS_CALLBACK_ESTABLISHED = 1,
     LWS_CALLBACK_CLIENT_CONNECTION_ERROR = 2,
 //    LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH,
@@ -60,17 +60,16 @@ enum libwebsocket_callback_reasons {
 #define LWS_SEND_BUFFER_PRE_PADDING 0
 #define LWS_SEND_BUFFER_POST_PADDING 0
     
-enum libwebsocket_write_protocol {
+enum lws_write_protocol {
 //        LWS_WRITE_TEXT,
         LWS_WRITE_BINARY,
 };
     
-typedef int (callback_function)(struct libwebsocket_context *context,
-    struct libwebsocket *wsi,
-			 enum libwebsocket_callback_reasons reason, void *user,
+typedef int (callback_function)(struct lws *wsi,
+			 enum lws_callback_reasons reason, void *user,
     void *in, size_t len);
     
-struct libwebsocket_protocols {
+struct lws_protocols {
     const char *name;
     callback_function *callback;
     size_t per_session_data_size;
@@ -82,15 +81,14 @@ struct libwebsocket_protocols {
      * no need for user to use them directly either
      */
     
-    struct libwebsocket_context *owning_server;
-    int protocol_index;
+    struct lws_context *owning_server;
 };
 
 struct lws_context_creation_info {
     int port;
     const char *iface;
-    struct libwebsocket_protocols *protocols;
-    struct libwebsocket_extension *extensions;
+    struct lws_protocols *protocols;
+    struct lws_extension *extensions;
     struct lws_token_limits *token_limits;
     const char *ssl_cert_filepath;
     const char *ssl_private_key_filepath;
@@ -107,14 +105,14 @@ struct lws_context_creation_info {
     int ka_interval;
 };
 
-struct libwebsocket_context* libwebsocket_create_context( struct lws_context_creation_info* info );
-struct libwebsocket_context* libwebsocket_create_context_extended( struct lws_context_creation_info* info );
+struct lws_context* lws_create_context( struct lws_context_creation_info* info );
+struct lws_context* lws_create_context_extended( struct lws_context_creation_info* info );
     
-void libwebsocket_context_destroy(struct libwebsocket_context* ctx );
+void lws_context_destroy(struct lws_context* ctx );
 
-struct libwebsocket* libwebsocket_client_connect_extended( struct libwebsocket_context*, const char* url, const char* protocol, void* user_data );
-int libwebsocket_write( struct libwebsocket* socket, const void* data, int len, enum libwebsocket_write_protocol protocol );
-void libwebsocket_callback_on_writable( struct libwebsocket_context* context, struct libwebsocket* socket );
+struct lws* lws_client_connect_extended( struct lws_context*, const char* url, const char* protocol, void* user_data );
+int lws_write( struct lws* socket, const void* data, int len, enum lws_write_protocol protocol );
+void lws_callback_on_writable( struct lws* socket );
     
 #ifdef __cplusplus
 }

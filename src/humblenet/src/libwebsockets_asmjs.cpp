@@ -7,32 +7,32 @@
 // TODO: should have a way to disable this on release builds
 #define LOG printf
 
-struct libwebsocket_context {
-	libwebsocket_protocols* protocols; // we dont have any state to manage.
+struct lws_context {
+	lws_protocols* protocols; // we dont have any state to manage.
 };
 
 
-extern "C" int EMSCRIPTEN_KEEPALIVE libwebsocket_helper( int protocol, struct libwebsocket_context *context,
-														struct libwebsocket *wsi,
-														enum libwebsocket_callback_reasons reason, void *user,
+extern "C" int EMSCRIPTEN_KEEPALIVE lws_helper( int protocol, struct lws_context *context,
+														struct lws *wsi,
+														enum lws_callback_reasons reason, void *user,
 														void *in, size_t len ) {
 	LOG("%d -> %d -> %p -> %d\n", protocol, reason, in, (int)len );
 
 	if( reason == LWS_CALLBACK_WSI_DESTROY ) {
-		context->protocols[protocol].callback( context, wsi, reason, user, in, len );
+		context->protocols[protocol].callback( wsi, reason, user, in, len );
 		// TODO See if we need to destroy the user_data..currently we dont allocate it, so we never would need to free it.
 		return 0;
 	}
 	else
-		return context->protocols[protocol].callback( context, wsi, reason, user, in, len );
+		return context->protocols[protocol].callback( wsi, reason, user, in, len );
 }
 
-struct libwebsocket_context* libwebsocket_create_context( struct lws_context_creation_info* info ){
-	return libwebsocket_create_context_extended( info );
+struct lws_context* lws_create_context( struct lws_context_creation_info* info ){
+	return lws_create_context_extended( info );
 }
 
-struct libwebsocket_context* libwebsocket_create_context_extended( struct lws_context_creation_info* info ) {
-	struct libwebsocket_context* ctx = new libwebsocket_context();
+struct lws_context* lws_create_context_extended( struct lws_context_creation_info* info ) {
+	struct lws_context* ctx = new lws_context();
 	ctx->protocols = info->protocols;
 
 	EM_ASM_({
@@ -40,7 +40,7 @@ struct libwebsocket_context* libwebsocket_create_context_extended( struct lws_co
 		var ctx = $0;
 
 		libwebsocket.sockets = new Map();
-		libwebsocket.on_event = Module.cwrap('libwebsocket_helper', 'number', ['number', 'number', 'number', 'number', 'number', 'number', 'number']);
+		libwebsocket.on_event = Module.cwrap('lws_helper', 'number', ['number', 'number', 'number', 'number', 'number', 'number', 'number']);
 		libwebsocket.connect = function( url, protocol, user_data ) {
 			try {
 				var socket = new WebSocket(url,protocol);
@@ -116,13 +116,13 @@ struct libwebsocket_context* libwebsocket_create_context_extended( struct lws_co
 	return ctx;
 }
 
-void libwebsocket_context_destroy(struct libwebsocket_context* ctx ) {
+void lws_context_destroy(struct lws_context* ctx ) {
 	delete ctx;
 }
 
-struct libwebsocket* libwebsocket_client_connect_extended(struct libwebsocket_context* ctx , const char* url, const char* protocol, void* user_data ) {
+struct lws* lws_client_connect_extended(struct lws_context* ctx , const char* url, const char* protocol, void* user_data ) {
 	
-	struct libwebsocket* s =  (struct libwebsocket*)EM_ASM_INT({
+	struct lws* s =  (struct lws*)EM_ASM_INT({
 		var socket = Module.__libwebsocket.connect( UTF8ToString($0), UTF8ToString($1), $2);
 		if( ! socket ) {
 			return 0;
@@ -134,7 +134,7 @@ struct libwebsocket* libwebsocket_client_connect_extended(struct libwebsocket_co
 	return s;
 }
 
-int libwebsocket_write( struct libwebsocket* socket, const void* data, int len, enum libwebsocket_write_protocol protocol ) {
+int lws_write( struct lws* socket, const void* data, int len, enum lws_write_protocol protocol ) {
 	return EM_ASM_INT({
 		var socket = Module.__libwebsocket.sockets.get( $0 );
 		if( ! socket ) {
@@ -155,7 +155,7 @@ int libwebsocket_write( struct libwebsocket* socket, const void* data, int len, 
 	}, socket, data, len );
 }
 
-void libwebsocket_callback_on_writable( struct libwebsocket_context* ctx, struct libwebsocket* socket ) {
+void lws_callback_on_writable( struct lws* socket ) {
 	// no-op
 }
 

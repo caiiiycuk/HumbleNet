@@ -4,7 +4,7 @@
 #include "humblepeer.h"
 #include "game.h"
 
-struct libwebsocket;
+struct lws;
 
 namespace humblenet {
 	struct Game;
@@ -22,7 +22,7 @@ namespace humblenet {
 
 		std::vector<uint8_t> recvBuf;
 		std::vector<char> sendBuf;
-		struct libwebsocket *wsi;
+		struct lws *wsi;
 		PeerId peerId;
 		HumblePeerState state;
 

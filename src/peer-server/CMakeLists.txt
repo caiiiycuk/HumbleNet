@@ -9,6 +9,8 @@ LINK
 	humblepeer
 	sha1
 	websockets
+	ssl
+	crypto
 	${CMAKE_THREAD_LIBS_INIT}
 PROPERTIES
 	FOLDER HumbleNet/Server
