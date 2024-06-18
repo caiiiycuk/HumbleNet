@@ -35,7 +35,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			if( native.length == 0 )
 			   return;
 
-			Module.print("Adding promise support to: " + method );
+			Module.out("Adding promise support to: " + method );
 
 			libwebrtc.RTCPeerConnection.prototype[method] = function() {
 				var self = this;
@@ -59,7 +59,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 				return;
 			}
 
-			Module.print("Adding promise support to: " + method );
+			Module.out("Adding promise support to: " + method );
 
 			libwebrtc.RTCPeerConnection.prototype[method] = function() {
 				var self = this;
@@ -125,7 +125,10 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			var sdp = this.localDescription.sdp;
 			var stack = stackSave();
 			// local description //
-			libwebrtc.on_event( ctx, this.id, 0, 1, this.user_data, allocate(intArrayFromString(sdp), 'i8', ALLOC_STACK), sdp.length);
+			const array  = intArrayFromString(sdp);
+			const buffer = stackAlloc(array.length);
+			Module.HEAPU8.set(array, buffer);
+			libwebrtc.on_event( ctx, this.id, 0, 1, this.user_data, buffer, sdp.length);
 			stackRestore(stack);
 		};
 		libwebrtc.on_candidate = function(event){
@@ -134,32 +137,35 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			}
 
 			if( this.iceConnectionState != 'new' && this.iceConnectionState != 'checking' && this.iceConnectionState == 'connected'  ) {
-				Module.print("ignoring ice, were not trying to connect: " + this.iceConnectionState);
+				Module.out("ignoring ice, were not trying to connect: " + this.iceConnectionState);
 				return;
 			}
 
 			if( !event.candidate ) {
-				Module.print("no more candidates: " + this.iceGatheringState );
+				Module.out("no more candidates: " + this.iceGatheringState );
 				if( ! this.trickle ) {
 					libwebrtc.on_sdp.call(this);
 				}
 				return;
 			}
 
-			Module.print("ice candidate " + event.candidate.candidate + " -- " + this.iceGatheringState);
+			Module.out("ice candidate " + event.candidate.candidate + " -- " + this.iceGatheringState);
 
 			if( this.trickle ) {
 				var stack = stackSave();
 				// ice_candidate //
-				libwebrtc.on_event( ctx, this.id, 0, 2, this.user_data, allocate(intArrayFromString(event.candidate.candidate), 'i8', ALLOC_STACK), event.candidate.candidate.length);
+				const array = intArrayFromString(event.candidate.candidate);
+				const buffer = stackAlloc(array.length);
+				Module.HEAPU8.set(array, buffer);
+				libwebrtc.on_event( ctx, this.id, 0, 2, this.user_data, buffer, event.candidate.candidate.length);
 				stackRestore(stack);
 			}
 		};
 		libwebrtc.on_signalstatechange = function(event){
-			Module.print("signalingState: "+ this.signalingState);
+			Module.out("signalingState: "+ this.signalingState);
 		};
 		libwebrtc.on_icestatechange = function(event){
-			Module.print( "icestate: " + this.iceConnectionState + " / iceGatheringState: " + this.iceGatheringState);
+			Module.out( "icestate: " + this.iceConnectionState + " / iceGatheringState: " + this.iceGatheringState);
 			if( this.iceConnectionState == 'failed' || this.iceConnectionState == 'disconnected'  ) {
 				this.close();
 			} else if( this.iceConnectionState == 'closed' ) {
@@ -177,7 +183,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			this.destroy();
 		};
 		libwebrtc.on_datachannel = function(event){
-			Module.print("datachannel");
+			Module.out("datachannel");
 			var channel = event.channel;
 
 			channel.parent = this;
@@ -195,38 +201,40 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			libwebrtc.channels.set( channel._id, channel);
 		};
 		libwebrtc.on_channel_accept = function(event){
-			Module.print("accept");
+			Module.out("accept");
 			var stack = stackSave();
 			// channel accepted //
-			libwebrtc.on_event(ctx, this.parent.id, this._id, 5, this.user_data, allocate(intArrayFromString(this.label), 'i8', ALLOC_STACK), this.label.length);
+			const array = intArrayFromString(this.label);
+			const buffer = stackAlloc(array.length);
+			Module.HEAPU8.set(array, buffer);
+			libwebrtc.on_event(ctx, this.parent.id, this._id, 5, this.user_data, buffer, this.label.length);
 			stackRestore(stack);
 		};
 		libwebrtc.on_channel_connected = function(event){
-			Module.print("connect");
+			Module.out("connect");
 			var stack = stackSave();
 			// channel connected //
-			libwebrtc.on_event(ctx, this.parent.id, this._id, 6, this.user_data, allocate(intArrayFromString(this.label), 'i8', ALLOC_STACK), this.label.length);
+			const array = intArrayFromString(this.label);
+			const buffer = stackAlloc(array.length);
+			Module.HEAPU8.set(array, buffer);
+			libwebrtc.on_event(ctx, this.parent.id, this._id, 6, this.user_data, buffer, this.label.length);
 			stackRestore(stack);
 		};
 		libwebrtc.on_channel_message = function(event){
 			var stack = stackSave();
 			var len = event.data.byteLength;
-			var ptr = allocate( len, 'i8', ALLOC_STACK);
+			var ptr = stackAlloc(len);
 
-//            Module.print("Data: " + len );
+//            Module.out("Data: " + len );
 			var data = new Uint8Array( event.data );
-
-			for(var i =0, buf = ptr; i < len; ++i ) {
-				setValue(buf, data[i], 'i8');
-				buf++;
-			}
+			Module.HEAPU8.set(data, ptr);
 
 			// channel data //
 			libwebrtc.on_event( ctx, this.parent.id, this._id, 7, this.user_data, ptr, len);
 			stackRestore(stack);
 		};
 		libwebrtc.on_channel_error = function(event){
-			Module.print("Got channel error: " + event);
+			Module.out("Got channel error: " + event);
 			this.close();
 		};
 		libwebrtc.on_channel_close = function(event){
@@ -246,7 +254,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			// destroy (connection) //
 			libwebrtc.on_event(ctx, this.id, 0, 10, this.user_data, 0, 0);
 			this.close();
-			Module.print("Destroy webrtc: " + this.id );
+			Module.out("Destroy webrtc: " + this.id );
 		};
 
 
@@ -394,10 +402,10 @@ int libwebrtc_add_ice_candidate( struct libwebrtc_connection* connection, const 
 		if( connection.iceConnectionState == 'checking' || connection.iceConnectionState == 'connected'
 		   // FF workaround
 		   || connection.iceConnectionState == 'new') {
-			Module.print( "AddIce: " + options.candidate );
+			Module.out( "AddIce: " + options.candidate );
 			connection.addIceCandidate( new Module.__libwebrtc.RTCIceCandidate( options ) );
 		} else {
-			Module.print( "Not negotiating (" + connection.iceConnectionState + "), ignored candidate: " + options.candidate );
+			Module.out( "Not negotiating (" + connection.iceConnectionState + "), ignored candidate: " + options.candidate );
 		}
 
 	}, connection, candidate );

@@ -60,14 +60,17 @@ struct lws_context* lws_create_context_extended( struct lws_context_creation_inf
 
 				return socket;
 			} catch(e) {
-				Module.print("Socket creation failed:" + e);
+				Module.out("Socket creation failed:" + e);
 				return 0;
 			}
 		};
 		libwebsocket.on_connect = function() {
 			var stack = stackSave();
 			// filter protocol //
-			var ret = libwebsocket.on_event( 0, ctx, this.id, 9, this.user_data, allocate(intArrayFromString(this.protocol), 'i8', ALLOC_STACK), this.protocol.length );
+			const array = intArrayFromString(this.protocol);
+			const buffer = stackAlloc(array.length);
+			Module.HEAPU8.set(array, buffer);
+			var ret = libwebsocket.on_event( 0, ctx, this.id, 9, this.user_data, buffer, this.protocol.length );
 			if( !ret ) {
 				// client established
 				ret = libwebsocket.on_event( this.protocol_id, ctx, this.id, 3, this.user_data, 0, 0 );
@@ -80,14 +83,9 @@ struct lws_context* lws_create_context_extended( struct lws_context_creation_inf
 		libwebsocket.on_message = function(event) {
 			var stack = stackSave();
 			var len = event.data.byteLength;
-			var ptr = allocate( len, 'i8', ALLOC_STACK);
-
 			var data = new Uint8Array( event.data );
-
-			for(var i =0, buf = ptr; i < len; ++i ) {
-				setValue(buf, data[i], 'i8');
-				buf++;
-			}
+			const ptr = stackAlloc(data.length);
+			Module.HEAPU8.set(data, ptr);
 
 			// client receive //
 			if( libwebsocket.on_event( this.protocol_id, ctx, this.id, 6, this.user_data, ptr, len ) ) {
