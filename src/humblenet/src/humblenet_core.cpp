@@ -466,7 +466,7 @@ int on_data( internal_socket_t* s, const void* data, int len, void* user_data ) 
 
 	assert( conn->status == HUMBLENET_CONNECTION_CONNECTED );
 
-	LOG("Received %d from peer %u\n", len, conn->otherPeer);
+	// LOG("Received %d from peer %u\n", len, conn->otherPeer);
 
 	if( conn->recvBuffer.empty() ) {
 		assert( humbleNetState.pendingDataConnections.find(conn) == humbleNetState.pendingDataConnections.end() );
