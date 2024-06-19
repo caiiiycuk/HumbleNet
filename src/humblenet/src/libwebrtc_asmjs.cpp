@@ -136,7 +136,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 				return;
 			}
 
-			if( this.iceConnectionState != 'new' && this.iceConnectionState != 'checking' && this.iceConnectionState == 'connected'  ) {
+			if( this.iceConnectionState === 'completed') {
 				Module.out("ignoring ice, were not trying to connect: " + this.iceConnectionState);
 				return;
 			}
@@ -170,7 +170,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 				this.close();
 			} else if( this.iceConnectionState == 'closed' ) {
 				libwebrtc.on_disconnected.call(this,event);
-			} else if( this.iceConnectionState == 'connected' ) {// use connected instead as FF never moves outbound to completed 'completed' )
+			} else if( this.iceConnectionState == 'completed' ) {
 				// connected //
 				libwebrtc.on_event( ctx, this.id, 0, 3, this.user_data, 0, 0);
 			}

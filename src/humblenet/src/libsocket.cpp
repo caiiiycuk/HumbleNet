@@ -218,6 +218,7 @@ int webrtc_protocol(struct libwebrtc_context *context,
 			break;
 
 		case LWRTC_CALLBACK_CHANNEL_CONNECTED:
+			socket->webrtc_channel = channel;
 			ret = socket->callbacks.on_connect_channel( socket, (const char*)in, socket->user_data );
 			break;
 
