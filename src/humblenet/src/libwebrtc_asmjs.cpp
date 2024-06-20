@@ -99,7 +99,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			return connection;
 		};
 		libwebrtc.create_channel = function(connection, name) {
-			var channel = connection.createDataChannel( name );
+			var channel = connection.createDataChannel( name, {ordered: false, maxRetransmits: 0} );
 			channel.parent = connection;
 			// use the parents data initially
 			channel.user_data = connection.user_data;

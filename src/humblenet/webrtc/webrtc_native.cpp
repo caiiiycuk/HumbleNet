@@ -348,8 +348,9 @@ WEBRTC_API struct libwebrtc_data_channel* libwebrtc_create_channel( struct libwe
 {
     webrtc::DataChannelInit config;
 
-    config.ordered = true;
-    config.reliable = true;
+    config.ordered = false;
+    config.reliable = false;
+    config.maxRetransmits = 0;
 
     rtc::scoped_refptr<webrtc::DataChannelInterface> dc = c->firstChannel.get() ? c->firstChannel : c->connection->CreateDataChannel( name, &config);
     assert( dc.get() != NULL );
@@ -377,8 +378,9 @@ WEBRTC_API int libwebrtc_create_offer( struct libwebrtc_connection* c ) {
 
     webrtc::DataChannelInit config;
 
-    config.ordered = true;
-    config.reliable = true;
+    config.ordered = false;
+    config.reliable = false;
+    config.maxRetransmits = 0;
 
     c->firstChannel = c->connection->CreateDataChannel( "default", &config);
 
