@@ -4,33 +4,24 @@
 //  Created by Chris Rudd on 3/9/16.
 //
 
+// This is a very janky wraper around native sockets that redirects the first UDP socket created to humblenet.
+// Tested initially on Quake III with Emscripten. Will likely need modification to work in other programs.
+
 #ifndef HUMBLENET_SOCKET_H
 #define HUMBLENET_SOCKET_H
 
 #include "humblenet_p2p.h"
 
-// TODO: Support transparent mode? -- use setsockopt to attach humblenet to a specific socket?
 
-#if defined EMSCRIPTEN && !defined NO_NATIVE_SOCKETS
-	#define NO_NATIVE_SOCKETS
-#endif
-
-#ifdef NO_NATIVE_SOCKETS
-	#include <netdb.h>
-	#include <errno.h>
-	#include <sys/ioctl.h>
-	#include <arpa/inet.h>
-#else
-	#include <unistd.h>
-	#include <sys/time.h>
-	#include <netinet/in.h>
-	#include <arpa/inet.h>
-	#include <netdb.h>
-	#include <sys/param.h>
-	#include <sys/ioctl.h>
-	#include <sys/uio.h>
-	#include <errno.h>
-#endif
+#include <unistd.h>
+#include <sys/time.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/param.h>
+#include <sys/ioctl.h>
+#include <sys/uio.h>
+#include <errno.h>
 
 #include <string.h>
 
@@ -43,11 +34,6 @@
 #endif
 #endif
 
-#define HUMBLENET_SOCKET		-2
-#define AF_HNET                 AF_MAX + 1
-
-#define PF_HNET                 AF_HNET
-
 struct hostent* hs_gethostbyname( const char* s );
 int hs_getaddrinfo( const char* node, const char* service, const struct addrinfo* hints, struct addrinfo** res );
 void hs_freeaddrinfo( struct addrinfo* res );
@@ -59,32 +45,25 @@ int hs_sendto( int sock, const void* buffer, int length, int flags, struct socka
 
 #ifdef HUMBLENET_SOCKET_IMPL
 
+int g_humblenet_socket = INVALID_SOCKET;
+
 int hs_socket( int af, int type, int protocol ) {
-	if( af == PF_HNET && type == SOCK_DGRAM )
-		return HUMBLENET_SOCKET;
-#ifndef NO_NATIVE_SOCKETS
-	else if( af != PF_HNET )
-		return socket( af, type, protocol );
-	else
-#endif
-	
-#ifdef _WIN32
-	WSASetLastError( WSAPROTONOTSUPPORTED );
-#else
-	errno = EINVAL;
-#endif
-	return INVALID_SOCKET;
+	int r = socket( af, type, protocol );
+	// Attach humblenet to the first UDP socket created
+	if( g_humblenet_socket == INVALID_SOCKET && af == PF_INET && type == SOCK_DGRAM )
+		g_humblenet_socket = r;
+	return r;
 }
 
 int hs_recvfrom( int sock, void* buffer, int length, int flags, struct sockaddr* addr, uint32_t* addr_len ) {
-	if( sock == HUMBLENET_SOCKET )
+	if( sock == g_humblenet_socket && sock != INVALID_SOCKET)
 	{
 		PeerId peer;
 		int ret =  humblenet_p2p_recvfrom(buffer, length, &peer, 0 );
 		((struct sockaddr_in*)addr)->sin_addr.s_addr = htonl(peer);
 		// we dont support ports...yet....
 		((struct sockaddr_in*)addr)->sin_port = 0;
-		((struct sockaddr_in*)addr)->sin_family = AF_HNET;
+		((struct sockaddr_in*)addr)->sin_family = AF_INET;
 		if( ret > 0 )
 			return ret;
 		else if( ret == -1 ) {
@@ -96,31 +75,25 @@ int hs_recvfrom( int sock, void* buffer, int length, int flags, struct sockaddr*
 		}
 		return ret;
 	}
-#ifndef NO_NATIVE_SOCKETS
 	else
 		return recvfrom(sock, buffer, length, flags, addr, addr_len );
-#endif
 }
 
 int hs_sendto( int sock, const void* buffer, int length, int flags, struct sockaddr* addr, uint32_t addr_len ) {
-	if( sock == HUMBLENET_SOCKET )
+	if( sock == g_humblenet_socket && sock != INVALID_SOCKET)
 	{
 		int ret = humblenet_p2p_sendto( buffer, length, ntohl(((struct sockaddr_in*)addr)->sin_addr.s_addr), SEND_RELIABLE, 0 );
 		if( ret == -1 )
 			errno = ECONNRESET;
 		return ret;
 	}
-#ifndef NO_NATIVE_SOCKETS
 	else
 		return sendto( sock, buffer, length, flags, addr, addr_len );
-#endif
-	
-	errno = EINVAL;
-	return -1;
 }
 
 int hs_select( int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout) {
 #ifdef EMSCRIPTEN
+	// TODO: fix this somehow to handle the case where there are humblenet and regular sockets in the same select
 	return humblenet_p2p_wait(0) ? 1 : 0;
 #else
 	return humblenet_p2p_select( nfds, readfds, writefds, exceptfds, timeout );
@@ -147,7 +120,7 @@ int hs_getaddrinfo( const char* node, const char* service, const struct addrinfo
 		memset(&addr, 0, sizeof(addr));
 		
 		info.ai_flags = 0x80000000;
-		info.ai_family = AF_HNET;
+		info.ai_family = AF_INET;
 		info.ai_socktype = SOCK_DGRAM;
 		//info.ai_protocol = ??
 		info.ai_addrlen = sizeof( addr );
@@ -164,16 +137,7 @@ int hs_getaddrinfo( const char* node, const char* service, const struct addrinfo
 		*res = &info;
 		return 0;
 	}
-#ifndef NO_NATIVE_SOCKETS
 	return getaddrinfo(node, service, hints, res);
-#else
-#ifdef _WIN32
-	WSASetLastError( WSAHOST_NOT_FOUND );
-#else
-	h_errno = HOST_NOT_FOUND;
-#endif
-	return EAI_NONAME;
-#endif
 }
 
 void hs_freeaddrinfo( struct addrinfo* res ) {
@@ -211,16 +175,7 @@ struct hostent* hs_gethostbyname( const char* s ) {
 		
 		return ret;
 	}
-#ifndef NO_NATIVE_SOCKETS
 	return gethostbyname(s);
-#else
-#ifdef _WIN32
-	WSASetLastError( WSAHOST_NOT_FOUND );
-#else
-	h_errno = HOST_NOT_FOUND;
-#endif
-	return NULL;
-#endif
 }
 
 #endif
@@ -237,13 +192,13 @@ struct hostent* hs_gethostbyname( const char* s ) {
 // How shouls we do it? would it be best to just define both to hs_close ?
 
 #ifdef _WIN32
-#define closesocket( x )		( x == HUMBLENET_SOCKET ? 0 : closesocket( x ) )
+#define closesocket( x )		( x == g_humblenet_socket && x != INVALID_SOCKET ? 0 : closesocket( x ) )
 #else
-#define close( x )				( x == HUMBLENET_SOCKET ? 0 : close( x ) )
+#define close( x )				( x == g_humblenet_socket && x != INVALID_SOCKET ? 0 : close( x ) )
 #endif
 
-#define ioctl( x, ... )			( x == HUMBLENET_SOCKET ? 0 : ioctl( x, __VA_ARGS__ ) )
-#define setsockopt( x, ... )	( x == HUMBLENET_SOCKET ? 0 : setsockopt( x, __VA_ARGS__ ) )
-#define bind( x, ... )			( x == HUMBLENET_SOCKET ? 0 : bind( x, __VA_ARGS__ ) )
+#define ioctl( x, ... )			( x == g_humblenet_socket && x != INVALID_SOCKET ? 0 : ioctl( x, __VA_ARGS__ ) )
+#define setsockopt( x, ... )	( x == g_humblenet_socket && x != INVALID_SOCKET ? 0 : setsockopt( x, __VA_ARGS__ ) )
+#define bind( x, ... )			( x == g_humblenet_socket && x != INVALID_SOCKET ? 0 : bind( x, __VA_ARGS__ ) )
 
 #endif /* HUMBLENET_SOCKET_H */
