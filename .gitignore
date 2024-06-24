@@ -3,3 +3,4 @@
 /tests/**/*.userprefs
 /.cache/
 /compile_commands.json
+/.vscode
