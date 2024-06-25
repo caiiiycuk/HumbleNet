@@ -34,7 +34,6 @@
 #include "p2p_connection.h"
 #include "server.h"
 #include "logging.h"
-#include "config.h"
 #include "game_db.h"
 
 using namespace humblenet;
@@ -54,62 +53,6 @@ static std::unique_ptr<Server> peerServer;
 static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void *user_data) {
 	return reinterpret_cast<P2PSignalConnection *>(user_data)->processMsg(msg);
 }
-
-int callback_default(struct lws *wsi
-				  , enum lws_callback_reasons reason
-				  , void *user, void *in, size_t len) {
-
-
-	switch (reason) {
-	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-		break;
-
-	case LWS_CALLBACK_FILTER_NETWORK_CONNECTION:
-		break;
-
-	case LWS_CALLBACK_SERVER_NEW_CLIENT_INSTANTIATED:
-		break;
-
-	case LWS_CALLBACK_PROTOCOL_INIT:
-		break;
-
-	case LWS_CALLBACK_PROTOCOL_DESTROY:
-		// we don't care
-		break;
-
-	case LWS_CALLBACK_WSI_CREATE:
-		break;
-
-	case LWS_CALLBACK_WSI_DESTROY:
-		break;
-
-	case LWS_CALLBACK_GET_THREAD_ID:
-		// ignore
-		break;
-
-	case LWS_CALLBACK_ADD_POLL_FD:
-		break;
-
-	case LWS_CALLBACK_DEL_POLL_FD:
-		break;
-
-	case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
-		break;
-
-	case LWS_CALLBACK_LOCK_POLL:
-		break;
-
-	case LWS_CALLBACK_UNLOCK_POLL:
-		break;
-
-	default:
-		LOG_WARNING("callback_default %p %u %p %p %u\n", wsi, reason, user, in, len);
-		break;
-	}
-
-	return 0;
-}
-
 
 int callback_humblepeer(struct lws *wsi
 				  , enum lws_callback_reasons reason
@@ -261,18 +204,24 @@ int callback_humblepeer(struct lws *wsi
 		break;
 
 	default:
-		LOG_WARNING("callback_humblepeer %p %u %p %p %u\n", wsi, reason, user, in, len);
+		// LOG_WARNING("callback_humblepeer %p %u %p %p %u\n", wsi, reason, user, in, len);
 		break;
 	}
 
 	return 0;
 }
 
+extern "C" struct lws_protocols acme_plugin_protocol;
 
-// TODO: would one callback be enough?
-struct lws_protocols protocols[] = {
-	  { "default", callback_default, 1 }
-	, { "humblepeer", callback_humblepeer, 1 }
+struct lws_protocols protocols_8080[] = {
+	  { "humblepeer", callback_humblepeer, 1 }
+	, { NULL, NULL, 0 }
+};
+
+struct lws_protocols protocols_443[] = {
+	  { "humblepeer", callback_humblepeer, 1 }
+	, acme_plugin_protocol
+
 	, { NULL, NULL, 0 }
 };
 
@@ -283,8 +232,9 @@ void help(const std::string& prog, const std::string& error = "")
 	}
 	std::cerr
 		<< "Humblenet peer match-making server\n"
-		<< " " << prog << "[-h] [-c configfile]\n"
-		<< "   -c     Configuration file to load (default peerServer.cfg)\n"
+		<< " " << prog << "[-h] --email em@example.com --common-name test.example.com\n"
+		<< "   --email Used to request SSL certificate from Let's Encrypt\n"
+		<< "   --common-name Domain name Let's Encrypt will ping during ACME and issue certs for\n"
 		<< "   -h     Displays this help\n"
 		<< std::endl;
 }
@@ -297,115 +247,124 @@ void sighandler(int sig)
 }
 
 int main(int argc, char *argv[]) {
-	std::string configFile = "peerServer.cfg";
-	tConfigOptions config;
-
+	char* email = nullptr;
+	char* common_name = nullptr;
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		std::string arg  = argv[i];
 		if (arg == "-h") {
 			help(argv[0]);
 			exit(1);
-		} else if (arg == "-c") {
+		} else if (arg == "--email") {
 			++i;
 			if (i < argc) {
-				configFile = argv[i];
+				email = argv[i];
 			} else {
-				help(argv[0], "No filename passed to -c option!");
+				help(argv[0], "--email option requires an argument");
+				exit(2);
+			}
+		} else if (arg == "--common-name") {
+			++i;
+			if (i < argc) {
+				common_name = argv[i];
+			} else {
+				help(argv[0], "--common_name option requires an argument");
 				exit(2);
 			}
 		}
 	}
 
-	// Parse config file
-	config.parseFile(configFile);
-
-	if (config.daemon) {
-#ifndef _WIN32
-		pid_t pid = fork();
-		if (pid < 0) {
-			std::cerr << "Failed to fork!!!" << std::endl;
-			exit(1);
-		} else if (pid > 0) {
-			// the Parent proces
-			exit(0);
-		}
-		// the child process
-		umask(0);
-
-		// create new SID
-		pid_t sid = setsid();
-		if (sid < 0) {
-			std::cerr << "Could not create SID!" << std::endl;
-			exit(1);
-		}
-
-		close(STDIN_FILENO);
-		close(STDOUT_FILENO);
-		close(STDERR_FILENO);
-#endif // _WIN32
+	if (email == nullptr || common_name == nullptr) {
+		help(argv[0], "--email and --common-name are required if you want to run with TLS\n");
 	}
 
-	logFileOpen(config.logFile);
+	// logFileOpen("peer-server.log");
+	logFileOpen("");
 
-	if (!config.pidFile.empty()) {
-		std::ofstream ofs(config.pidFile.c_str());
+	std::ofstream ofs("peer-server.pidfile");
 #ifndef _WIN32
-		ofs << (int)getpid() << std::endl;
+	ofs << (int)getpid() << std::endl;
 #endif // _WIN32
-	}
 
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
 
 	std::shared_ptr<GameDB> gameDB;
 
-	if (config.gameDB.empty()) {
-		gameDB.reset(new GameDBAnonymous());
-	} else if (config.gameDB.compare(0, 5, "flat:") == 0) {
-		gameDB.reset(new GameDBFlatFile(config.gameDB.substr(5)));
-	} else {
-		LOG_WARNING("Unknown DB type: %s\n", config.gameDB.c_str());
-		exit(1);
-	}
+	gameDB.reset(new GameDBAnonymous());
+	// gameDB.reset(new GameDBFlatFile(config.gameDB.substr(5)));
 
 	peerServer.reset(new Server(gameDB));
-	peerServer->stunServerAddress = config.stunServerAddress;
+	peerServer->stunServerAddress = "stun.cloudflare.com:3478";
 
 	struct lws_context_creation_info info;
 	memset(&info, 0, sizeof(info));
-	info.protocols = protocols;
-	info.port = config.port;
 	info.gid = -1;
 	info.uid = -1;
-#define WS_OPT(member, var) info.member = (!var.empty()) ? var.c_str() : NULL
-	WS_OPT(iface, config.iface);
-	WS_OPT(ssl_cert_filepath, config.sslCertFile);
-	WS_OPT(ssl_private_key_filepath, config.sslPrivateKeyFile);
-	WS_OPT(ssl_ca_filepath, config.sslCACertFile);
-	WS_OPT(ssl_cipher_list, config.sslCipherList);
-#undef WS_OPT
-
+	info.options = LWS_SERVER_OPTION_IGNORE_MISSING_CERT | LWS_SERVER_OPTION_EXPLICIT_VHOSTS;
+	
 	peerServer->context = lws_create_context(&info);
 	if (peerServer->context == NULL) {
 		// TODO: error message
 		exit(1);
 	}
 
+	info.port = 8080;
+	info.vhost_name = "HTTP_8080_vhost";
+	struct lws_protocol_vhost_options pvo6 = {
+		NULL, NULL, "email", email
+	}, pvo5 = {
+		&pvo6, NULL, "common-name", common_name
+	}, pvo4 = {
+		&pvo5, NULL, "directory-url", "https://acme-v02.api.letsencrypt.org/directory" //"https://acme-staging-v02.api.letsencrypt.org/directory"
+	}, pvo3 = {
+		&pvo4, NULL, "auth-path", "./auth.jwk"
+	}, pvo2 = {
+		&pvo3, NULL, "cert-path", "./peer-server.key.crt"
+	}, pvo1 = {
+		&pvo2, NULL, "key-path", "./peer-server.key.pem" /* would be an absolute path */
+	}, pvo = {
+		NULL,                  /* "next" pvo linked-list */
+		&pvo1,                 /* "child" pvo linked-list */
+		"lws-acme-client",        /* protocol name we belong to on this vhost */
+		""                     /* ignored */
+	};
+	info.pvo = &pvo;
+
+	struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
+	if (host_8080 == NULL) {
+		LOG_ERROR("Failed to create vhost for port 8080\n");
+		exit(1);
+	}
+
+	if (email == nullptr || common_name == nullptr) {
+		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
+	} else {
+		info.protocols = protocols_443;
+		info.port = 443;
+		info.vhost_name = "SSL_vhost";
+		info.ssl_cert_filepath = "./peer-server.key.crt";
+		info.ssl_private_key_filepath = "./peer-server.key.pem";
+		info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+		struct lws_vhost *host_443 = lws_create_vhost(peerServer->context, &info);
+		if (host_443 == NULL) {
+			LOG_ERROR("Failed to create vhost for port 443\n");
+			exit(1);
+		}
+	}
+
 	while (keepGoing) {
 		// use timeout so we will eventually process signals
 		// but relatively long to reduce CPU load
 		// TODO: configurable timeout
-		lws_service(peerServer->context, 200);
+		lws_service(peerServer->context, 1000);
 	}
 
 	peerServer.reset();
 
-	if (!config.pidFile.empty()) {
 #ifndef _WIN32
-		unlink(config.pidFile.c_str());
+	unlink("peer-server.pidfile");
 #endif // _WIN32
-	}
 
 	return 0;
 }
