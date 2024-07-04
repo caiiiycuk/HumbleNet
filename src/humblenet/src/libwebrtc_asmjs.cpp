@@ -83,7 +83,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 		libwebrtc.create = function() {
 			var connection = new this.RTCPeerConnection(this.options,null);
 
-			connection.trickle = false; // must not use trickle till native side can handle accepting a candidate.
+			connection.trickle = true;
 
 			connection.destroy = this.destroy;
 
@@ -398,6 +398,7 @@ int libwebrtc_add_ice_candidate( struct libwebrtc_connection* connection, const 
 
 		var options = {};
 		options.candidate = UTF8ToString($1);
+		options.sdpMLineIndex = 0;
 
 		if( connection.iceConnectionState == 'checking' || connection.iceConnectionState == 'connected'
 		   // FF workaround

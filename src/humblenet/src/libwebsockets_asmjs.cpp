@@ -135,7 +135,7 @@ struct lws* lws_client_connect_extended(struct lws_context* ctx , const char* ur
 int lws_write( struct lws* socket, const void* data, int len, enum lws_write_protocol protocol ) {
 	return EM_ASM_INT({
 		var socket = Module.__libwebsocket.sockets.get( $0 );
-		if( ! socket ) {
+		if( ! socket || socket.readyState !== 1) {
 			return -1;
 		}
 
