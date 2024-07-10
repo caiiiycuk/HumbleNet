@@ -143,12 +143,15 @@ int callback_humblepeer(struct lws *wsi
 			char *inBuf = reinterpret_cast<char *>(in);
 			it->second->recvBuf.insert(it->second->recvBuf.end(), inBuf, inBuf + len);
 
-			// function which will parse recvBuf
-			ha_bool retval = parseMessage(it->second->recvBuf, p2pSignalProcess, it->second.get());
-			if (!retval) {
-				// error in parsing, close connection
-				LOG_ERROR("Error in parsing message from \"%s\"\n", it->second->url.c_str());
-				return -1;
+			// If we finished receiving a whole message
+			if (!lws_remaining_packet_payload(wsi) && lws_is_final_fragment(wsi)) {
+				// function which will parse recvBuf
+				ha_bool retval = parseMessage(it->second->recvBuf, p2pSignalProcess, it->second.get());
+				if (!retval) {
+					// error in parsing, close connection
+					LOG_ERROR("Error in parsing message from \"%s\"\n", it->second->url.c_str());
+					return -1;
+				}
 			}
 		}
 
@@ -330,6 +333,7 @@ int main(int argc, char *argv[]) {
 		""                     /* ignored */
 	};
 	info.pvo = &pvo;
+	info.protocols = protocols_8080;
 
 	struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
 	if (host_8080 == NULL) {
