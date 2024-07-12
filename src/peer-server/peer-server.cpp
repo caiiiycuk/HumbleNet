@@ -54,12 +54,66 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 	return reinterpret_cast<P2PSignalConnection *>(user_data)->processMsg(msg);
 }
 
+static bool lookup_peer(const std::string& hostname) {
+	if (peerServer->games.empty()) return false;
+	auto& aliases = peerServer->games.begin()->second->aliases;
+	return aliases.find(hostname) != aliases.end();
+}
+
+static const char* get_http_body(void *user) {
+	if (*(char*)user) return "{\"found\":true}";
+	else return "{\"found\":false}";
+}
+
 int callback_humblepeer(struct lws *wsi
 				  , enum lws_callback_reasons reason
 				  , void *user, void *in, size_t len) {
 
 
 	switch (reason) {
+	case LWS_CALLBACK_HTTP:
+		{
+			const char *uri = (const char *)in;
+			if (strncmp(uri, "/lookup/", 8) == 0) {
+				const char *hostname = uri + 8;
+				(*(char*)user) = lookup_peer(hostname) ? 1 : 0;
+				unsigned char buffer[2048];
+				unsigned char *p = buffer;
+				unsigned char *end = buffer + sizeof(buffer);
+				if (lws_add_http_header_status(wsi, HTTP_STATUS_OK, &p, end))
+					return 1;
+				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CACHE_CONTROL, (unsigned char *)"no-cache", 8, &p, end))
+					return 1;
+				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CONTENT_TYPE, (unsigned char *)"application/json", 16, &p, end))
+					return 1;
+				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_ACCESS_CONTROL_ALLOW_ORIGIN, (unsigned char *)"*", 1, &p, end))
+					return 1;
+				if (lws_add_http_header_content_length(wsi, strlen(get_http_body(user)), &p, end))
+					return 1;
+				if (lws_finalize_http_header(wsi, &p, end))
+					return 1;
+				lws_write(wsi, buffer, p - buffer, LWS_WRITE_HTTP_HEADERS);
+				lws_callback_on_writable(wsi);
+				return 0;
+			} else {
+				lws_return_http_status(wsi, HTTP_STATUS_NOT_FOUND, NULL);
+			}
+		}
+		break;
+	case LWS_CALLBACK_HTTP_WRITEABLE:
+		{
+			const char* body = NULL;
+			body = get_http_body(user);
+			size_t len = strlen(body);
+			if (lws_write(wsi, (unsigned char*)body, len, LWS_WRITE_HTTP_FINAL) != len) {
+				return 1;
+			}
+			if (lws_http_transaction_completed(wsi)) {
+				return -1;
+			}
+			return 0;
+		}
+		break;
 
 	case LWS_CALLBACK_ESTABLISHED:
 		{
@@ -283,6 +337,7 @@ int main(int argc, char *argv[]) {
 
 	// logFileOpen("peer-server.log");
 	logFileOpen("");
+	lws_set_log_level(LLL_ERR | LLL_WARN, NULL);
 
 	std::ofstream ofs("peer-server.pidfile");
 #ifndef _WIN32
