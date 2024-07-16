@@ -1,3 +1,6 @@
 [submodule "3rdparty/libwebsockets"]
 	path = 3rdparty/libwebsockets
-	url = https://github.com/warmcat/libwebsockets.git
+	url = git@github.com:jdarpinian/libwebsockets.git
+[submodule "3rdparty/boringssl"]
+	path = 3rdparty/boringssl
+	url = git@github.com:google/boringssl.git

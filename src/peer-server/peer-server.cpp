@@ -77,7 +77,8 @@ int callback_humblepeer(struct lws *wsi
 			if (strncmp(uri, "/lookup/", 8) == 0) {
 				const char *hostname = uri + 8;
 				(*(char*)user) = lookup_peer(hostname) ? 1 : 0;
-				unsigned char buffer[2048];
+				unsigned char buffer[8192];
+				memset(buffer, 0, sizeof(buffer));
 				unsigned char *p = buffer;
 				unsigned char *end = buffer + sizeof(buffer);
 				if (lws_add_http_header_status(wsi, HTTP_STATUS_OK, &p, end))
@@ -90,9 +91,9 @@ int callback_humblepeer(struct lws *wsi
 					return 1;
 				if (lws_add_http_header_content_length(wsi, strlen(get_http_body(user)), &p, end))
 					return 1;
-				if (lws_finalize_http_header(wsi, &p, end))
+				if (lws_finalize_write_http_header(wsi, buffer, &p, end))
 					return 1;
-				lws_write(wsi, buffer, p - buffer, LWS_WRITE_HTTP_HEADERS);
+				// lws_write(wsi, buffer, p - buffer, LWS_WRITE_HTTP_HEADERS);
 				lws_callback_on_writable(wsi);
 				return 0;
 			} else {
@@ -105,7 +106,11 @@ int callback_humblepeer(struct lws *wsi
 			const char* body = NULL;
 			body = get_http_body(user);
 			size_t len = strlen(body);
-			if (lws_write(wsi, (unsigned char*)body, len, LWS_WRITE_HTTP_FINAL) != len) {
+			unsigned char buffer[8192];
+			memset(buffer, 0, sizeof(buffer));
+			strncpy((char*)buffer, body, len);
+
+			if (lws_write(wsi, buffer, len, LWS_WRITE_HTTP_FINAL) != len) {
 				return 1;
 			}
 			if (lws_http_transaction_completed(wsi)) {
