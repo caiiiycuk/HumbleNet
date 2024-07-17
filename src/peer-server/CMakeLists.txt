@@ -1,4 +1,5 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
+
 
 CreateTool(peer-server
 DIRS
@@ -16,7 +17,9 @@ LINK
 	${LWS_BORING_INTERFACE}
 PROPERTIES
 	FOLDER HumbleNet/Server
+	CXX_STANDARD 14
 )
+
 
 source_group("Source" REGULAR_EXPRESSION ".")
 source_group("" FILES CMakeLists.txt)

@@ -4,3 +4,6 @@
 [submodule "3rdparty/boringssl"]
 	path = 3rdparty/boringssl
 	url = git@github.com:google/boringssl.git
+[submodule "3rdparty/flatbuffers"]
+	path = 3rdparty/flatbuffers
+	url = git@github.com:google/flatbuffers.git

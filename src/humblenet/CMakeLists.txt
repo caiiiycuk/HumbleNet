@@ -1,4 +1,4 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 
 
 if(HUMBLENET_NATIVE)
@@ -49,22 +49,36 @@ if(HUMBLENET_DESKTOP)
 	set(CERT_PEM_H ${CMAKE_CURRENT_BINARY_DIR}/cert_pem.h)
 endif()
 
-GenerateFlatBuffer(FLATBUFFER_SOURCES SCOPED_ENUMS humblepeer/humblepeer.fbs)
+add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
+    COMMAND flatc --cpp --scoped-enums
+            -o "."
+            "${CMAKE_CURRENT_SOURCE_DIR}/humblepeer/humblepeer.fbs"
+    DEPENDS flatc)
+
+message(STATUS CMAKE_CURRENT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 CreateLibrary(humblepeer
 	DIRS
 		humblepeer
 	FILES
 		${FLATBUFFER_SOURCES}
+		"${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
 	REFERENCE
 		humblepeer/*.fbs
 	INCLUDES
-		PUBLIC
+		${CMAKE_CURRENT_BINARY_DIR}
+		../../3rdparty/flatbuffers/include/
+		flatbuffers
+	PUBLIC
 			${CMAKE_CURRENT_BINARY_DIR}
+			../../3rdparty/flatbuffers/include/
 			include
 			humblepeer
-		INTERFACE
-			src
+			flatbuffers
+	INTERFACE
+		flatbuffers
+		src
 	FLAGS
 		PRIVATE
 			$<$<BOOL:${LINUX_X86_64}>:-fPIC>
@@ -78,7 +92,9 @@ CreateLibrary(humblepeer
 			sha1
 	PROPERTIES
 		FOLDER HumbleNet/Library
-)
+	DEPENDS
+	"${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
+	)
 
 set(CORE_HUMBLENET
 	DIRS

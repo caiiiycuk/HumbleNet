@@ -1,6 +1,8 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 set(CMAKE_USER_MAKE_RULES_OVERRIDE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/c_flag_overrides.cmake)
 set(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cxx_flag_overrides.cmake)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14 -Wno-error -Wno-deprecated-copy-with-user-provided-copy")
+
 
 PROJECT(humblenet)
 
@@ -8,11 +10,15 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 if(APPLE)
 	set(CMAKE_OSX_ARCHITECTURES x86_64 CACHE STRING "" FORCE)
-	set(CMAKE_OSX_DEPLOYMENT_TARGET 10.9 CACHE STRING "" FORCE)
+	set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13 CACHE STRING "" FORCE)
 endif()
 
 include(BoilerPlate)
 include(UtilityFunctions)
+
+add_subdirectory(3rdparty/flatbuffers)
+target_compile_options(flatc PUBLIC -Wno-error)
+target_compile_options(flatbuffers PUBLIC -Wno-error)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
@@ -28,48 +34,14 @@ option(HUMBLENET_TESTS "Build the humblenet tests" ON)
 
 if(LINUX OR APPLE)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden --std=c++14")
 endif()
+
 
 find_program(FLATC_EXECUTABLE
 	NAMES flatc
 	NO_CMAKE_FIND_ROOT_PATH
 )
-
-if(NOT FLATC_EXECUTABLE)
-	message(WARNING "Flatc not found.  Flatbuffers headers will not be rebuilt.  Please install flatc.")
-endif()
-
-function(GenerateFlatBuffer outvar)
-	set(_extra_args "")
-	foreach(_fbs ${ARGN})
-		if (_fbs STREQUAL "SCOPED_ENUMS")
-			list(APPEND _extra_args --scoped-enums)
-		else()
-			get_filename_component(_full_fbs ${_fbs} ABSOLUTE)
-			if(NOT EXISTS ${_full_fbs})
-				message(FATAL_ERROR "Could not found input files ${_fbs}")
-			endif()
-			get_filename_component(_base_name ${_fbs} NAME_WE)
-			set(_output ${CMAKE_CURRENT_BINARY_DIR}/${_base_name}_generated.h)
-			list(APPEND _generated_sources ${_output})
-			if (FLATC_EXECUTABLE)
-				set_source_files_properties(${_output} PROPERTIES GENERATED ON)
-				add_custom_command(
-					OUTPUT ${_output}
-					COMMAND ${FLATC_EXECUTABLE}
-					ARGS -o ${CMAKE_CURRENT_BINARY_DIR} ${_extra_args} --cpp ${_full_fbs}
-					DEPENDS ${_full_fbs}
-					COMMENT "Generating flatbuffer source for ${_fbs}"
-				)
-			endif()
-		endif()
-	endforeach()
-	set(${outvar} ${_generated_sources} PARENT_SCOPE)
-endfunction()
-
-add_library(flatbuffers INTERFACE)
-target_include_directories(flatbuffers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/flatbuffers/include)
 
 
 if(HUMBLENET_NATIVE)
@@ -189,6 +161,7 @@ if(HUMBLENET_NATIVE)
 			-DLWS_WITH_ACME:BOOL=ON
 			-DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
 			-DLWS_WITH_BORINGSSL:BOOL=ON
+			-DLWS_WITH_SHARED:BOOL=OFF
 			${LWS_ZLIB_CONFIG}
 			${LWS_BORING_CONFIG}
 			${LINUX_ARCH_CONFIG}
