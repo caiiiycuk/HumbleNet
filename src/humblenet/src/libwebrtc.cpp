@@ -222,6 +222,27 @@ void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** ser
 	}
 }
 
+void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password)
+{
+	// WARNING completely untested, you will need to fix this if you want to use it
+	assert(0);
+	sockaddr_in6 turnServer;
+	// TODO: get port from server string, example code in ILibWrapperWebRTC.c for stun servers
+	int port = 3478;
+	if(ILibResolve((char*)server, (char*)"http", &turnServer) == 0) {
+		switch(turnServer.sin6_family)
+		{
+			case AF_INET:
+				((struct sockaddr_in*)&turnServer)->sin_port = htons(port);
+				break;
+			case AF_INET6:
+				turnServer.sin6_port = htons(port);
+				break;
+		}
+		ILibWrapper_WebRTC_ConnectionFactory_SetTurnServer(ctx->factory, &turnServer, (char*)username, strlen(username), (char*)password, strlen(password), ILibWebRTC_TURN_ENABLED);
+	}
+}
+
 struct libwebrtc_connection* libwebrtc_create_connection_extended( struct libwebrtc_context* ctx, void* user_data )
 {
 	ILibWrapper_WebRTC_Connection conn = ILibWrapper_WebRTC_ConnectionFactory_CreateConnection(ctx->factory, &WebRTCConnectionStatus, &WebRTCDataChannelAccept, &WebRTCConnectionSendOk);

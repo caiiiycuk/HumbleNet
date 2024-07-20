@@ -311,6 +311,9 @@ void sighandler(int sig)
 int main(int argc, char *argv[]) {
 	char* email = nullptr;
 	char* common_name = nullptr;
+	char* turn_server = nullptr;
+	char* turn_username = nullptr;
+	char* turn_password = nullptr;
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		std::string arg  = argv[i];
@@ -333,11 +336,43 @@ int main(int argc, char *argv[]) {
 				help(argv[0], "--common_name option requires an argument");
 				exit(2);
 			}
+		} else if (arg == "--TURN-server") {
+			++i;
+			if (i < argc) {
+				turn_server = argv[i];
+			} else {
+				help(argv[0], "--TURN-server option requires an argument");
+				exit(2);
+			}
+		} else if (arg == "--TURN-username") {
+			++i;
+			if (i < argc) {
+				turn_username = argv[i];
+			} else {
+				help(argv[0], "--TURN-username option requires an argument");
+				exit(2);
+			}
+		} else if (arg == "--TURN-password") {
+			++i;
+			if (i < argc) {
+				turn_password = argv[i];
+			} else {
+				help(argv[0], "--TURN-password option requires an argument");
+				exit(2);
+			}
 		}
 	}
 
 	if (email == nullptr || common_name == nullptr) {
 		help(argv[0], "--email and --common-name are required if you want to run with TLS\n");
+	}
+
+	if (turn_server != nullptr || turn_username != nullptr || turn_password != nullptr) {
+		if (turn_server == nullptr || turn_username == nullptr || turn_password == nullptr) {
+			help(argv[0], "--TURN-server, --TURN-username, and --TURN-password must all be specified together\n");
+			exit(2);
+		}
+	
 	}
 
 	// logFileOpen("peer-server.log");
@@ -358,7 +393,12 @@ int main(int argc, char *argv[]) {
 	// gameDB.reset(new GameDBFlatFile(config.gameDB.substr(5)));
 
 	peerServer.reset(new Server(gameDB));
-	peerServer->stunServerAddress = "stun.cloudflare.com:3478";
+	// peerServer->stunServerAddress = "stun.cloudflare.com:3478";
+	if (turn_server) {
+		peerServer->turnSurver = turn_server;
+		peerServer->turnUsername = turn_username;
+		peerServer->turnPassword = turn_password;
+	}
 
 	struct lws_context_creation_info info;
 	memset(&info, 0, sizeof(info));

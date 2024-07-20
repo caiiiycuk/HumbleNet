@@ -3,6 +3,7 @@ global:
     libwebrtc_create_context;
     libwebrtc_destroy_context;
     libwebrtc_set_stun_servers;
+    libwebrtc_add_turn_server;
     libwebrtc_create_connection_extended;
     libwebrtc_create_channel;
     libwebrtc_create_offer;

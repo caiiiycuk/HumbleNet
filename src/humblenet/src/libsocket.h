@@ -48,6 +48,7 @@ void internal_register_protocol( internal_context_t*, const char* protocol, inte
     
 internal_socket_t* internal_connect_websocket( const char* addr, const char* protocol );
 void internal_set_stun_servers( internal_context_t*, const char** servers, int count);
+void internal_add_turn_server( internal_context_t*, const char* server, const char* username, const char* password);
 internal_socket_t* internal_create_webrtc(internal_context_t *);
 int internal_create_offer( internal_socket_t* socket );
 int internal_set_offer( internal_socket_t* socket, const char* offer );

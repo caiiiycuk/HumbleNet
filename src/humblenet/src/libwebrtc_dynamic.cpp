@@ -10,6 +10,7 @@
 	X( struct libwebrtc_context* ,      libwebrtc_create_context,               ( lwrtc_callback_function cb ),                                         (cb) )                  \
 	X( void,                            libwebrtc_destroy_context,              ( struct libwebrtc_context* ctx),                                       (ctx) )                 \
 	X( void,                            libwebrtc_set_stun_servers,             ( struct libwebrtc_context* ctx, const char** servers, int count),      (ctx, servers, count) ) \
+	X( void,                            libwebrtc_add_turn_server,              ( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password),      (ctx, server, username, password) ) \
 	X( struct libwebrtc_connection*,    libwebrtc_create_connection_extended,   ( struct libwebrtc_context* ctx, void* user_data ),                     (ctx, user_data) )      \
 	X( struct libwebrtc_data_channel*,  libwebrtc_create_channel,               ( struct libwebrtc_connection* conn, const char* name ),                (conn,name) )           \
 	X( int,                             libwebrtc_create_offer,                 ( struct libwebrtc_connection* conn),                                   (conn) )                \

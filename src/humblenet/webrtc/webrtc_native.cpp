@@ -34,6 +34,9 @@
 struct libwebrtc_context {
     lwrtc_callback_function callback;
     std::vector<std::string> stunServers;
+    std::string turnServer;
+    std::string turnUsername;
+    std::string turnPassword;
 
     std::unique_ptr<rtc::Thread> network_thread;
     std::unique_ptr<rtc::Thread> worker_thread;
@@ -321,6 +324,14 @@ WEBRTC_API void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const
     }
 }
 
+WEBRTC_API void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password)
+{
+    ctx->turnServer = server;
+    ctx->turnUsername = username;
+    ctx->turnPassword = password;
+}
+
+
 WEBRTC_API struct libwebrtc_connection* libwebrtc_create_connection_extended( struct libwebrtc_context* ctx, void* user_data )
 {
     webrtc::PeerConnectionInterface::RTCConfiguration config;
@@ -328,6 +339,13 @@ WEBRTC_API struct libwebrtc_connection* libwebrtc_create_connection_extended( st
     for( const std::string& server : ctx->stunServers ) {
         webrtc::PeerConnectionInterface::IceServer ice_server;
         ice_server.uri = "stun:" + server;
+        config.servers.push_back(ice_server);
+    }
+    if (!ctx->turnServer.empty() && !ctx->turnUsername.empty() && !ctx->turnPassword.empty()) {
+        webrtc::PeerConnectionInterface::IceServer ice_server;
+        ice_server.uri = "turn:" + ctx->turnServer;
+        ice_server.username = ctx->turnUsername;
+        ice_server.password = ctx->turnPassword;
         config.servers.push_back(ice_server);
     }
 

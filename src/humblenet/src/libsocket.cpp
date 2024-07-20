@@ -330,6 +330,13 @@ void internal_set_stun_servers( internal_context_t* ctx, const char** servers, i
 	}
 }
 
+void internal_add_turn_server( internal_context_t* ctx, const char* server, const char* username, const char* password ) {
+	libwebrtc_add_turn_server( ctx->webrtc, server, username, password );
+	ctx->turnServer = server;
+	ctx->turnUsername = username;
+	ctx->turnPassword = password;
+}
+
 void internal_set_callbacks(internal_socket_t* socket, internal_callbacks_t* callbacks ) {
 	if( ! callbacks ) {
 		socket->callbacks = g_context->callbacks;

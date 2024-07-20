@@ -41,6 +41,7 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function );
 void libwebrtc_destroy_context( struct libwebrtc_context* );
 
 void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** servers, int count);
+void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password);
     
 struct libwebrtc_connection* libwebrtc_create_connection_extended( struct libwebrtc_context*, void* user_data );
 struct libwebrtc_data_channel* libwebrtc_create_channel( struct libwebrtc_connection* conn, const char* name );

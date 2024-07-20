@@ -279,7 +279,7 @@ void libwebrtc_destroy_context(struct libwebrtc_context* ctx)
 void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** servers, int count)
 {
 	EM_ASM({
-		Module.__libwebrtc.options.iceServers = [];
+		Module.__libwebrtc.options.iceServers = Module.__libwebrtc.options.iceServers || [];
 	});
 
 	for( int i = 0; i < count; ++i ) {
@@ -290,6 +290,17 @@ void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** ser
 		}, *servers);
 		servers++;
 	}
+}
+
+void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password) {
+	EM_ASM({
+		Module.__libwebrtc.options.iceServers = Module.__libwebrtc.options.iceServers || [];
+		Module.__libwebrtc.options.iceServers.push({
+			urls: "turn:" + UTF8ToString($0),
+			username: UTF8ToString($1),
+			credential: UTF8ToString($2)
+		});
+	}, server, username, password);
 }
 
 struct libwebrtc_connection* libwebrtc_create_connection_extended(struct libwebrtc_context* ctx, void* user_data) {

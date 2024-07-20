@@ -84,5 +84,8 @@ namespace humblenet {
 		if( ! stunServerAddress.empty() ) {
 			servers.emplace_back(stunServerAddress);
 		}
+		if (!turnSurver.empty() && !turnUsername.empty() && !turnPassword.empty()) {
+			servers.emplace_back(turnSurver, turnUsername, turnPassword);
+		}
 	}
 }

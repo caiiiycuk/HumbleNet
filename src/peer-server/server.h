@@ -23,6 +23,9 @@ namespace humblenet {
 		std::unordered_map<GameId, std::unique_ptr<Game> > games;
 
 		std::string stunServerAddress;
+		std::string turnSurver;
+		std::string turnUsername;
+		std::string turnPassword;
 
 
 		Server(std::shared_ptr<GameDB> _gameDB);
