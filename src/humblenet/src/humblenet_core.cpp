@@ -353,7 +353,8 @@ int on_ice_candidate( internal_socket_t* s, const char* offer, void* user_data )
 		return -1;
 	}
 
-	assert( conn->status == HUMBLENET_CONNECTION_CONNECTING );
+	// This is OK with trickle ICE
+	// assert( conn->status == HUMBLENET_CONNECTION_CONNECTING );
 
 	LOG("Sending ice candidate to peer: %u, %s\n", conn->otherPeer, offer );
 	if( ! sendICECandidate(humbleNetState.p2pConn.get(), conn->otherPeer, offer) ) {
