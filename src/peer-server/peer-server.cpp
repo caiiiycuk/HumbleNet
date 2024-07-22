@@ -405,6 +405,11 @@ int main(int argc, char *argv[]) {
 	info.gid = -1;
 	info.uid = -1;
 	info.options = LWS_SERVER_OPTION_IGNORE_MISSING_CERT | LWS_SERVER_OPTION_EXPLICIT_VHOSTS;
+	const lws_retry_bo_t retry = {
+		.secs_since_valid_ping = 30,
+		.secs_since_valid_hangup = 100,
+	};
+	info.retry_and_idle_policy = &retry;
 	
 	peerServer->context = lws_create_context(&info);
 	if (peerServer->context == NULL) {
