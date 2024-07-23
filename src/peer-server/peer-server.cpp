@@ -245,13 +245,16 @@ int callback_humblepeer(struct lws *wsi
 				// error while sending, close the connection
 				return -1;
 			}
+			if (retval < bufsize) {
+				// This should not happen. lws_write returns the number of bytes written but it includes the headers it adds to pre padding which we don't know about.
+				// So if it actually does a partial write there is no way for us to know how much of our data was sent and how much was headers, the API would be broken.
+				// The docs say it buffers data internally and sends it all, so this shouldn't happen.
+				LOG_ERROR("Partial write to peer %u (%s)\n", conn->peerId, conn->url.c_str());
+				return -1;
+			}
 
 			// successful write
-			conn->sendBuf.erase(conn->sendBuf.begin(), conn->sendBuf.begin() + retval);
-			// check if it was only partial
-			if (!conn->sendBuf.empty()) {
-				lws_callback_on_writable(conn->wsi);
-			}
+			conn->sendBuf.clear();
 		}
 		break;
 
