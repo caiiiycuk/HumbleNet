@@ -15,19 +15,14 @@ struct datagram_connection {
 	Connection*			conn;			// established connection.
 	PeerId				peer;			// "address"
 
-	std::vector<char>	buf_in;			// data we have received but not yet processed.
-	std::vector<char>	buf_out;		// packet combining...
-	int					queued;
+	// packets in and out
+	std::deque<std::vector<char>>	buf_in;
+	std::deque<std::vector<char>>	buf_out;
 
-	uint32_t seq_out = 0;
-	uint32_t seq_in = 0;
 	
 	datagram_connection( Connection* conn, bool outgoing )
 	:conn( conn )
 	,peer( humblenet_connection_get_peer_id( conn ) )
-	,queued( 0 )
-	,seq_out( 0 )
-	,seq_in( 0 )
 	{
 	}
 };
@@ -37,77 +32,35 @@ typedef std::map<Connection*, datagram_connection> ConnectionMap;
 static ConnectionMap	connections;
 static bool				queuedPackets = false;
 
-struct datagram_header {
-    uint16_t size;
-    uint8_t  channel;
-    uint32_t seq;
+static int datagram_get_message( datagram_connection& conn, void* buffer, size_t length, int flags, uint8_t channel ) {
 
-    uint8_t data[];
-};
-
-static int datagram_get_message( datagram_connection& conn, const void* buffer, size_t length, int flags, uint8_t channel ) {
-
-	std::vector<char>& in = conn.buf_in;
-	std::vector<char>::iterator start = in.begin();
-
-restart:
-
-	uint16_t available = in.end() - start;
-
-	if( available <= sizeof( datagram_header ) )
-		return -1;
-
-	datagram_header* hdr = reinterpret_cast<datagram_header*>(&in[start - in.begin()]);
-
-	if ((hdr->size + sizeof(datagram_header)) > available) {
-		// incomplete packet
-		LOG("Incomplete packet from %u. %d but only have %d\n", conn.peer, hdr->size, available );
-		return -1;
-	}
-
-	auto end = start + sizeof(datagram_header) + hdr->size;
-
-	if( hdr->channel != channel ) {
-		TRACE("Incorrect channel: wanted %d but got %d(%u) from %u\n", channel, hdr->channel, hdr->size, conn.peer );
-
-		// skip to next packet.
-		start = end;
-
-		goto restart;
-	}
-
+	assert(channel == 0);
+	if (conn.buf_in.empty())
+		return 0;
+	size_t len = std::min(conn.buf_in.front().size(), length);
 	if( flags & HUMBLENET_MSG_PEEK )
-		return hdr->size;
-
-	// prevent buffer overruns on read.
-	// this WILL truncate the message if the supplied buffer is not big enough -- see IEEE Std -> recvfrom.
-	length = std::min<size_t>( length, hdr->size );
-	memcpy((char*)buffer, hdr->data, length);
-
-	// since we are accessing hdr directly out of the buffer, we need a local to store the msg size that was read.
-	uint16_t size = hdr->size;
-	in.erase(start, end);
-	
-	return size;
+		return len;
+	memcpy(buffer, &conn.buf_in.front()[0], len);
+	conn.buf_in.pop_front();
+	return len;
 }
 
 static void datagram_flush( datagram_connection& dg, const char* reason ) {
 	if( ! dg.buf_out.empty() )
 	{
 		if( ! humblenet_connection_is_writable( dg.conn ) ) {
-			LOG("Waiting(%s) %d packets (%zu bytes) to  %p\n", reason, dg.queued, dg.buf_out.size(), dg.conn );
+			LOG("Waiting(%s) %zu packets to  %p\n", reason, dg.buf_out.size(), dg.conn );
 			return;
 		}
 
-		if( dg.queued > 1 )
-			LOG("Flushing(%s) %d packets (%zu bytes) to  %p\n", reason, dg.queued, dg.buf_out.size(), dg.conn );
-		int ret = humblenet_connection_write( dg.conn, &dg.buf_out[0], dg.buf_out.size() );
-		if( ret < 0 ) {
-			LOG("Error flushing packets: %s\n", humblenet_get_error() );
-			humblenet_clear_error();
+		while( ! dg.buf_out.empty() ) {
+			int ret = humblenet_connection_write( dg.conn, dg.buf_out.front().data(), dg.buf_out.front().size() );
+			dg.buf_out.pop_front();
+			if( ret < 0 ) {
+				LOG("Error flushing packets: %s\n", humblenet_get_error() );
+				humblenet_clear_error();
+			}
 		}
-		dg.buf_out.clear();
-		dg.queued = 0;
 	}
 }
 
@@ -142,33 +95,24 @@ int humblenet_datagram_send( const void* message, size_t length, int flags, Conn
 
 	datagram_connection& dg = it->second;
 
-	datagram_header hdr;
+	LOG("Sending %zu bytes to %p, [0]=%d\n", length, conn, *(uint8_t*)message );
+	dg.buf_out.emplace_back(reinterpret_cast<const char*>( message ), reinterpret_cast<const char*>( message ) + length);
 
-	hdr.size = length;
-	hdr.channel = channel;
-	hdr.seq = dg.seq_out++;
-
-	dg.buf_out.reserve( dg.buf_out.size() + length + sizeof(datagram_header) );
-
-	dg.buf_out.insert( dg.buf_out.end(), reinterpret_cast<const char*>( &hdr ), reinterpret_cast<const char*>( &hdr ) + sizeof( datagram_header ) );
-	dg.buf_out.insert( dg.buf_out.end(), reinterpret_cast<const char*>( message ), reinterpret_cast<const char*>( message ) + length );
-
-	dg.queued++;
-
-	if( !( flags & HUMBLENET_MSG_BUFFERED ) ) {
+	// if( !( flags & HUMBLENET_MSG_BUFFERED ) ) {
 		datagram_flush( dg, "no-delay" );
-	} else if( dg.buf_out.size() > 1024 ) {
-		datagram_flush( dg, "max-length" );
-	} else {
-		queuedPackets = true;
-		//if( dg.queued > 1 )
-		//    LOG("Queued %d packets (%zu bytes) for  %p\n", dg.queued, dg.buf_out.size(), dg.conn );
-	}
+	// } else if( dg.buf_out.size() > 1024 ) {
+	// 	datagram_flush( dg, "max-length" );
+	// } else {
+	// 	queuedPackets = true;
+	// 	//if( dg.queued > 1 )
+	// 	//    LOG("Queued %d packets (%zu bytes) for  %p\n", dg.queued, dg.buf_out.size(), dg.conn );
+	// }
 	return length;
 }
 
 int humblenet_datagram_recv( void* buffer, size_t length, int flags, Connection** fromconn, uint8_t channel )
 {
+	assert(channel == 0);
 	// flush queued packets
 	if( queuedPackets ) {
 		for( ConnectionMap::iterator it = connections.begin(); it != connections.end(); ++it ) {
@@ -203,10 +147,9 @@ int humblenet_datagram_recv( void* buffer, size_t length, int flags, Connection*
 		}
 
 		// read whatever we can...
-		int retval = 0;
-		char* buf = (char*)humblenet_connection_read_all(conn, &retval );
+		uint8_t internalBuffer[1500];
+		int retval = humblenet_connection_read(conn, internalBuffer, sizeof(internalBuffer));
 		if( retval < 0 ) {
-			free( buf );
 			connections.erase( it );
 			LOG("read from peer %u(%p) failed with %s\n", peer, conn, humblenet_get_error() );
 			humblenet_clear_error();
@@ -216,9 +159,9 @@ int humblenet_datagram_recv( void* buffer, size_t length, int flags, Connection*
 			}
 			continue;
 		} else {
-			it->second.buf_in.insert( it->second.buf_in.end(), buf, buf+retval );
-			free( buf );
+			it->second.buf_in.emplace_back(internalBuffer, internalBuffer + retval);
 			retval = datagram_get_message( it->second, buffer, length, flags, channel );
+			// LOG("after datagram_get_message, read %d bytes packet from peer %u(%p), [0]=%d\n", retval, peer, conn, buffer[0] );
 			if( retval > 0 ) {
 				*fromconn = it->second.conn;
 				return retval;

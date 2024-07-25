@@ -7,6 +7,7 @@
 #include "humblenet_p2p_signaling.h"
 
 #include <memory>
+#include <deque>
 
 // TODO: should have a way to disable this on release builds
 #define LOG printf
@@ -33,7 +34,7 @@ struct Connection {
 	// 0 if not a p2p connection
 	PeerId otherPeer;
 
-	std::vector<char> recvBuffer;
+	std::deque<std::vector<char>> recvBuffer;
 
 	ha_bool writable;
 
@@ -207,15 +208,6 @@ int humblenet_connection_write(Connection *connection, const void *buf, uint32_t
  * Returns the number of bytes received, -1 on error
  */
 int humblenet_connection_read(Connection *connection, void *buf, uint32_t bufsize);
-
-
-/*
- * Receive data through Connection
- * Returns a malloc() -allocated buffer
- * You are responsible for freeing it
- * sets *retval to number of bytes in buffer or negative on error
- */
-void *humblenet_connection_read_all(Connection *connection, int *retval);
 
 
 /*

@@ -480,7 +480,7 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			auto peer = relay->peerId();
 			auto data = relay->data();
 			
-			LOG("Got %d bytes relayed from peer %u\n", data->Length(), peer );
+			LOG("Got %d bytes relayed from peer %u\n", data->size(), peer );
 
 			// Sequentially look for the other peer
 			auto it = humbleNetState.connections.begin();
@@ -493,9 +493,7 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			} else {
 				Connection* conn = it->second;
 				
-				conn->recvBuffer.insert(conn->recvBuffer.end()
-										, reinterpret_cast<const char *>(data->Data())
-										, reinterpret_cast<const char *>(data->Data()) + data->Length());
+				conn->recvBuffer.emplace_back(data->begin(), data->end());
 				humbleNetState.pendingDataConnections.insert( conn );
 				
 				signal();

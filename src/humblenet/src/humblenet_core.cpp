@@ -233,10 +233,9 @@ int humblenet_connection_read(Connection *connection, void *buf, uint32_t bufsiz
 			if( connection->recvBuffer.empty() )
 				return 0;
 
-			bufsize = std::min<uint32_t>(bufsize, connection->recvBuffer.size() );
-			memcpy(buf, &connection->recvBuffer[0], bufsize);
-			connection->recvBuffer.erase(connection->recvBuffer.begin()
-										 , connection->recvBuffer.begin() + bufsize);
+			bufsize = std::min<uint32_t>(bufsize, connection->recvBuffer[0].size() );
+			memcpy(buf, &connection->recvBuffer[0][0], bufsize);
+			connection->recvBuffer.pop_front();
 
 			if( ! connection->recvBuffer.empty() )
 				humbleNetState.pendingDataConnections.insert(connection);
@@ -467,14 +466,14 @@ int on_data( internal_socket_t* s, const void* data, int len, void* user_data ) 
 
 	assert( conn->status == HUMBLENET_CONNECTION_CONNECTED );
 
-	// LOG("Received %d from peer %u\n", len, conn->otherPeer);
+	LOG("on_data: Received %d from peer %u\n", len, conn->otherPeer);
 
 	if( conn->recvBuffer.empty() ) {
 		assert( humbleNetState.pendingDataConnections.find(conn) == humbleNetState.pendingDataConnections.end() );
 		humbleNetState.pendingDataConnections.insert(conn);
 	}
 
-	conn->recvBuffer.insert( conn->recvBuffer.end(), reinterpret_cast<const char*>(data),
+	conn->recvBuffer.emplace_back(reinterpret_cast<const char*>(data),
 							reinterpret_cast<const char*>(data)+len);
 
 	signal();
@@ -640,50 +639,6 @@ void HUMBLENET_CALL humblenet_clear_error() {
 // END MISC
 
 // BEGIN DEPRECATED
-
-void *humblenet_connection_read_all(Connection *connection, int *retval) {
-	assert(connection != NULL);
-
-	if (connection->status == HUMBLENET_CONNECTION_CONNECTING) {
-		// not open yet
-		return 0;
-	}
-
-	if (connection->recvBuffer.empty()) {
-		// must not be in poll-returnable connections anymore
-		assert(humbleNetState.pendingDataConnections.find(connection) == humbleNetState.pendingDataConnections.end());
-
-		if (connection->status == HUMBLENET_CONNECTION_CLOSED) {
-			// TODO: Connection should contain reason it was closed and we should report that
-			humblenet_set_error("Connection closed");
-			*retval = -1;
-			return NULL;
-		}
-
-		*retval = 0;
-		return NULL;
-	}
-
-	size_t dataSize = connection->recvBuffer.size();
-	void *buf = malloc(dataSize);
-
-	if (buf == NULL) {
-		humblenet_set_error("Memory allocation failed");
-		*retval = -1;
-		return NULL;
-	}
-
-	memcpy(buf, &connection->recvBuffer[0], dataSize);
-	connection->recvBuffer.clear();
-
-	auto it = humbleNetState.pendingDataConnections.find(connection);
-	assert(it != humbleNetState.pendingDataConnections.end());
-	humbleNetState.pendingDataConnections.erase(it);
-
-	*retval = dataSize;
-	return buf;
-}
-
 
 Connection *humblenet_poll_all(int timeout_ms) {
 	{
