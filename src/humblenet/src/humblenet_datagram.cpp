@@ -95,7 +95,6 @@ int humblenet_datagram_send( const void* message, size_t length, int flags, Conn
 
 	datagram_connection& dg = it->second;
 
-	LOG("Sending %zu bytes to %p, [0]=%d\n", length, conn, *(uint8_t*)message );
 	dg.buf_out.emplace_back(reinterpret_cast<const char*>( message ), reinterpret_cast<const char*>( message ) + length);
 
 	// if( !( flags & HUMBLENET_MSG_BUFFERED ) ) {
