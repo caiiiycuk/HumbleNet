@@ -381,6 +381,7 @@ int main(int argc, char *argv[]) {
 	// logFileOpen("peer-server.log");
 	logFileOpen("");
 	lws_set_log_level(LLL_ERR | LLL_WARN, NULL);
+	// lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO | LLL_DEBUG | LLL_EXT, NULL);
 
 	std::ofstream ofs("peer-server.pidfile");
 #ifndef _WIN32
@@ -443,11 +444,11 @@ int main(int argc, char *argv[]) {
 	info.pvo = &pvo;
 	info.protocols = protocols_8080;
 
-	struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
-	if (host_8080 == NULL) {
-		LOG_ERROR("Failed to create vhost for port 8080\n");
-		exit(1);
-	}
+	// struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
+	// if (host_8080 == NULL) {
+	// 	LOG_ERROR("Failed to create vhost for port 8080\n");
+	// 	exit(1);
+	// }
 
 	if (email == nullptr || common_name == nullptr) {
 		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
