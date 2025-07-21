@@ -1,6 +1,8 @@
 HumbleNet
 =========
 
+[![humblenet-linux](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml/badge.svg)](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml)
+
 HumbleNet is a cross platform networking library that utilizes WebRTC and WebSockets to handle network communication.
 
 Using WebRTC and Websockets allows HumbleNet to support not only traditional platforms such as Windows, OS X, and Linux, but also web platforms such as ASM.JS / Emscripten.
@@ -64,19 +66,5 @@ Project Dependencies:
 Compilation:
 ------------
 
-1. Download the project from github;
-2. Go the downloaded folder;
-3. Create a `build` folder (just to better organize the output code) and enter the directory;
-4. Run the command: `cmake ..` (with 2 dots), this will configure into the directory all files needed to build the library;
-5. Now it's need to copy the FlatBuffers include files:
-    1. Go to folder where you downloaded the FlatBuffers;
-    2. Copy the folder `flatbuffers` inside the `include` dir;
-    3. Go back to your `<HumbleNetDir>/build` folder;
-    4. Paste the `flatbuffers` folder into the `humblenet` dir, along side the `humblepeer_generated.h` file;
-    5. This folder contains the `flatbuffers.h` file, that is a source dependency.
-6. From the `build` folder you can run the `make` command alone, and it will try to build all code, or with the desired `target`, example:
-    1. `make all`: will build all executables and libraries;
-    2. `make clean`: will clean the directory, but mantain the config files;
-    3. `make humblenet_test_peer`: build the test peer found in `<HumberNetDir>/tests/test_peer.cpp`;
-    4. `make peer-server`: will build the test server found in `<HumbleNetDir>/src/peer-server`;
+Follow steps from [action file](https://github.com/caiiiycuk/HumbleNet/blob/master/.github/workflows/humblenet-linux.yml)
 
