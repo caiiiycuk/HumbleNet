@@ -399,7 +399,7 @@ int main(int argc, char *argv[]) {
 	peerServer.reset(new Server(gameDB));
 	// peerServer->stunServerAddress = "stun.cloudflare.com:3478";
 	if (turn_server) {
-		peerServer->turnSurver = turn_server;
+		peerServer->turnServer = turn_server;
 		peerServer->turnUsername = turn_username;
 		peerServer->turnPassword = turn_password;
 	}

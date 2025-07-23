@@ -23,7 +23,7 @@ namespace humblenet {
 		std::unordered_map<GameId, std::unique_ptr<Game> > games;
 
 		std::string stunServerAddress;
-		std::string turnSurver;
+		std::string turnServer;
 		std::string turnUsername;
 		std::string turnPassword;
 
