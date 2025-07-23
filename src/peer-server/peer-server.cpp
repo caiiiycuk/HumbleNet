@@ -444,17 +444,17 @@ int main(int argc, char *argv[]) {
 	info.pvo = &pvo;
 	info.protocols = protocols_8080;
 
-	// struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
-	// if (host_8080 == NULL) {
-	// 	LOG_ERROR("Failed to create vhost for port 8080\n");
-	// 	exit(1);
-	// }
+	struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
+	if (host_8080 == NULL) {
+		LOG_ERROR("Failed to create vhost for port 8080\n");
+		exit(1);
+	}
 
 	if (email == nullptr || common_name == nullptr) {
 		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
 	} else {
 		info.protocols = protocols_443;
-		info.port = 443;
+		info.port = 444;
 		info.vhost_name = "SSL_vhost";
 		info.ssl_cert_filepath = "./peer-server.key.crt";
 		info.ssl_private_key_filepath = "./peer-server.key.pem";
