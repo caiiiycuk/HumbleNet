@@ -1,4 +1,4 @@
-/*   
+/*
 Copyright 2006 - 2015 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,6 +43,35 @@ limitations under the License.
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
 #include <openssl/hmac.h>
+
+
+// helper
+int get_public_key_der(X509 *cert, char **out, int *out_len) {
+	if (!cert || !out || !out_len)
+		return 0;
+
+	X509_PUBKEY *pubkey = X509_get_X509_PUBKEY(cert);
+	if (!pubkey)
+		return 0;
+
+	int len = i2d_X509_PUBKEY(pubkey, NULL);
+	if (len <= 0)
+		return 0;
+
+	unsigned char *buf = OPENSSL_malloc(len);
+	if (!buf)
+		return 0;
+
+	unsigned char *p = buf;
+	if (i2d_X509_PUBKEY(pubkey, &p) != len) {
+		OPENSSL_free(buf);
+		return 0;
+	}
+
+	*out = (char *)buf;
+	*out_len = len;
+	return 1;
+}
 
 
 // openssl RAND_bytes does Bad Things when called from multiple threads
@@ -561,6 +590,8 @@ int __fastcall util_mkCert(struct util_cert *rootcert, struct util_cert* cert, i
 	char serial[8];
 	char nameStr[(UTIL_HASHSIZE * 2) + 2];
 	BIGNUM *oBigNbr;
+	char *public_key;
+	int public_key_len;
 
 #ifndef OPENSSL_IS_BORINGSSL
 	MemCheck_on();
@@ -610,9 +641,12 @@ int __fastcall util_mkCert(struct util_cert *rootcert, struct util_cert* cert, i
 	if (name == NULL)
 	{
 		// Computer the hash of the public key
-		util_sha256((char*)x->cert_info->key->public_key->data, x->cert_info->key->public_key->length, hash);
-		util_tohex(hash, UTIL_HASHSIZE, nameStr);
-		X509_NAME_add_entry_by_txt(cname,"CN", MBSTRING_ASC, (unsigned char*)nameStr, -1, -1, 0);
+		if (get_public_key_der(x, &public_key, &public_key_len)) {
+			util_sha256(public_key, public_key_len, hash);
+			util_tohex(hash, UTIL_HASHSIZE, nameStr);
+			X509_NAME_add_entry_by_txt(cname,"CN", MBSTRING_ASC, (unsigned char*)nameStr, -1, -1, 0);
+			OPENSSL_free(public_key);
+		}
 	}
 	else
 	{
@@ -676,15 +710,26 @@ err:
 
 int __fastcall util_keyhash(struct util_cert cert, char* result)
 {
+	char *public_key;
+	int public_key_len;
+
 	if (cert.x509 == NULL) return -1;
-	util_sha256((char*)(cert.x509->cert_info->key->public_key->data), cert.x509->cert_info->key->public_key->length, result);
+	if (get_public_key_der(cert.x509, &public_key, &public_key_len)) {
+		util_sha256(public_key, public_key_len, result);
+		OPENSSL_free(public_key);
+	}
 	return 0;
 }
 
 int __fastcall util_keyhash2(X509* cert, char* result)
 {
+	char *public_key;
+	int public_key_len;
 	if (cert == NULL) return -1;
-	util_sha256((char*)(cert->cert_info->key->public_key->data), cert->cert_info->key->public_key->length, result);
+	if (get_public_key_der(cert, &public_key, &public_key_len)) {
+		util_sha256(public_key, public_key_len, result);
+		OPENSSL_free(public_key);
+	}
 	return 0;
 }
 
@@ -1165,5 +1210,4 @@ int __fastcall util_crc(unsigned char *buffer, int len, int initial_value)
     return hval;
 }
 #endif
-
 

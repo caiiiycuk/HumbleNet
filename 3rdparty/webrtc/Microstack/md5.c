@@ -35,7 +35,7 @@
  * compile-time configuration.
  */
 
-#ifndef HAVE_OPENSSL
+#if !defined(HAVE_OPENSSL) && defined(MICROSTACK_MD5)
 
 #include <string.h>
 

@@ -29,6 +29,8 @@ limitations under the License.
 #include <wininet.h>
 #endif
 
+#include <openssl/hmac.h>
+
 #include "ILibParsers.h"
 #include "ILibAsyncSocket.h"
 #include "ILibAsyncUDPSocket.h"
@@ -5071,8 +5073,11 @@ int ILibStunClient_dTLS_verify_callback(int ok, X509_STORE_CTX *ctx)
 
 	// Validate the incoming certificate against known allowed fingerprints.
 	UNREFERENCED_PARAMETER(ok);
-
-	X509_digest(ctx->current_cert, EVP_get_digestbyname("sha256"), (unsigned char*)thumbprint, (unsigned int*)&l);
+	X509 *cert = X509_STORE_CTX_get_current_cert(ctx);
+	if (!X509_STORE_CTX_get_error(ctx)) {
+		return 0;
+	}
+	X509_digest(cert, EVP_get_digestbyname("sha256"), (unsigned char*)thumbprint, (unsigned int*)&l);
 	if (l != 32 || g_stunModule == NULL) return 0;
 	ILibRemoteLogging_printf(ILibChainGetLogger(g_stunModule->Chain), ILibRemoteLogging_Modules_WebRTC_DTLS, ILibRemoteLogging_Flags_VerbosityLevel_1, "Verifying Inbound Cert: %s", ILibRemoteLogging_ConvertToHex(thumbprint, 32));
 	

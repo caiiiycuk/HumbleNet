@@ -43,6 +43,7 @@ if(HUMBLENET_DESKTOP)
 		cxx_auto_type cxx_range_for
 	LINK
 		humblenet
+		cap
 		-g
 	PROPERTIES
 		FOLDER HumbleNet/Tests
@@ -75,6 +76,7 @@ FEATURES
 	cxx_auto_type cxx_range_for
 LINK
 	humblenet
+	cap
 PROPERTIES
 	FOLDER HumbleNet/Tests
 )
