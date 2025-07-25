@@ -33,7 +33,7 @@ static time_t startPeerLastHello;
 static PeerId startPeerId = 0;
 PeerStatus startPeerStatus = PeerStatus::NONE;
 
-const uint8_t CHANNEL = 42;
+const uint8_t CHANNEL = 0;
 const uint16_t MAX_MESSAGE_SIZE = 512;
 
 const char client_token[] = "hello_world";
@@ -191,13 +191,23 @@ int main(int argc, char *argv[])
 		startPeerStatus = PeerStatus::WAITING;
 		startPeerId = std::stol(argv[1]);
 	}
+
 	// Initialize the core library
 	humblenet_init();
 
 	// Initialize the P2P subsystem connecting to the named peer server
 	// Client token and secret are defined in the peer server configuration
 	// the 4th argument is for user authentication (future feature)
-	humblenet_p2p_init(HUMBLENET_SERVER_URL, client_token, client_secret, NULL);
+	if (!humblenet_p2p_init(HUMBLENET_SERVER_URL, client_token, client_secret, NULL)) {
+		printf("ERR! Can't initialize humblenet\n");
+		return 1;
+	}
+
+	if (!humblenet_p2p_is_initialized()) {
+		printf("ERR! Humble net should be in initialized state\n");
+		return 1;
+	}
+
 
 #ifdef EMSCRIPTEN
 	EM_ASM(

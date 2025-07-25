@@ -7,7 +7,7 @@ using FlatBuffers;
 
 class TestPeer
 {
-	const byte CHANNEL = 52;
+	const byte CHANNEL = 0;
 
 	bool connected = false;
 	DateTime last = DateTime.UtcNow;

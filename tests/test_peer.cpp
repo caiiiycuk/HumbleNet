@@ -18,7 +18,7 @@
 
 static PeerId myPeer = 0;
 static bool connected = false;
-const uint8_t CHANNEL = 52;
+const uint8_t CHANNEL = 0;
 
 std::unordered_set<PeerId> pendingPeers;
 std::unordered_set<PeerId> connectedPeers;
