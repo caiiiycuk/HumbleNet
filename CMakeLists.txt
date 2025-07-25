@@ -6,6 +6,16 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14 -Wno-error -Wno-deprecated-c
 
 PROJECT(humblenet)
 
+IF(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT(EMSCRIPTEN))
+	#    asan
+	add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+	add_link_options(-fsanitize=address)
+	#    ubsan
+	#    add_compile_options(-fsanitize=undefined -fno-sanitize=alignment)
+	#    add_link_options(-fsanitize=undefined)
+ENDIF()
+
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 if(APPLE)
@@ -267,4 +277,8 @@ if(HUMBLENET_SERVER)
 endif()
 if(HUMBLENET_TESTS)
 	add_subdirectory(tests					test)
+endif()
+
+if(EMSCRIPTEN)
+	add_subdirectory(jsapi 					jsapi)
 endif()
