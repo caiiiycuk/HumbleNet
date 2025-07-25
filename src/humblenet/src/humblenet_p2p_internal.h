@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <deque>
+#include <functional>
 
 // TODO: should have a way to disable this on release builds
 #define LOG printf
@@ -76,6 +77,8 @@ typedef struct HumbleNetState {
 	// outgoing pending (not established) alias connections
 	// pointer not owned
 	std::unordered_map<std::string, Connection *> pendingAliasConnectionsOut;
+
+	std::unordered_map<std::string, const std::function<void(std::vector<std::pair<std::string,PeerId>>)>> pendingAliasQueryOut;
 
 	// map of peers that are blacklisted, value is when they they were blacklisted
 	// incoming peers are added to this list when they are disconnected.

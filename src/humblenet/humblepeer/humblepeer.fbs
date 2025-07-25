@@ -91,6 +91,20 @@ table AliasResolved {
 	peerId			: uint;
 }
 
+table AliasRecord {
+    alias : string (required);
+    peerId : uint;
+}
+
+table AliasQuery {
+    query : string (required);
+}
+
+table AliasQueryResult {
+    query : string (required);
+    records : [AliasRecord] (required);
+}
+
 // Message switch
 union MessageType {
 	// Main peer-server connection (1 -> 9)
@@ -98,7 +112,7 @@ union MessageType {
 	// P2P Negotiation specific messages (10 -> 19)
 	P2PConnected = 10, P2PDisconnect, P2POffer, P2PAnswer, P2PReject, ICECandidate, P2PRelayData,
 	// Name Alias system (20 -> 29)
-	AliasRegister = 20, AliasUnregister, AliasLookup, AliasResolved,
+	AliasRegister = 20, AliasUnregister, AliasLookup, AliasResolved, AliasQuery, AliasQueryResult
 }
 
 table Message {

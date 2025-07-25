@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <string>
 #include <ctime>
+#include <random>
 
 enum class PeerStatus : uint8_t{
 	NONE,
@@ -42,6 +43,21 @@ const char client_secret[] = "secret";
 extern "C" {
 	EMSCRIPTEN_KEEPALIVE void connectToPeer(PeerId peer);
 	EMSCRIPTEN_KEEPALIVE void sendChat(PeerId peer, const char* message);
+}
+
+std::string random_string(size_t length) {
+	static const std::string charset = "abcdefghijklmnopqrstuvwxyz";
+
+	static std::mt19937 rng(std::random_device{}()); // генератор
+	static std::uniform_int_distribution<> dist(0, charset.size() - 1);
+
+	std::string result;
+	result.reserve(length);
+
+	for (size_t i = 0; i < length; ++i)
+		result += charset[dist(rng)];
+
+	return result;
 }
 
 void send_message(PeerId peer, MessageType type, const char* text, int size)
@@ -121,13 +137,34 @@ void main_loop()
 		// check to see if we finished connecting to the peer server
 		myPeer = humblenet_p2p_get_my_peer_id();
 		if (myPeer != 0) {
-			std::cout << "We connected to the peer server with peer " << myPeer << std::endl;
+			// setting alias
+			auto ourName = std::string("hw.") + random_string(3);
+			humblenet_p2p_register_alias(ourName.c_str());
+			std::cout << "We connected to the peer server with peer " << myPeer <<
+				" our name is " << ourName << std::endl;
+
 			if (startPeerStatus == PeerStatus::WAITING) {
 				// initiate the connection to the remote peer
 				startPeerLastHello = time(NULL);
 				startPeerStatus = PeerStatus::CONNECTING;
 				send_message(startPeerId, MessageType::HELLO, "", 0);
 			}
+
+			humblenet_p2p_alias_query("", [](std::vector<std::pair<std::string, PeerId>> matches) {
+				std::cout << "Query result for ''" << std::endl;
+				for (const auto& it: matches) {
+					std::cout << it.first << " -> " << it.second << std::endl;
+				}
+				std::cout << "--" << std::endl;
+			});
+
+			humblenet_p2p_alias_query("hw.", [](std::vector<std::pair<std::string, PeerId>> matches) {
+				std::cout << "Query result for 'hw.'" << std::endl;
+				for (const auto& it: matches) {
+					std::cout << it.first << " -> " << it.second << std::endl;
+				}
+				std::cout << "--" << std::endl;
+			});
 		}
 	} else {
 		// check if we have connected to the other peer

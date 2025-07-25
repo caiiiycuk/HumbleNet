@@ -118,6 +118,13 @@ PeerId HUMBLENET_CALL humblenet_p2p_virtual_peer_for_alias(const char* name) {
 	return internal_alias_lookup( name );
 }
 
+HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_p2p_alias_query(const char* query,
+	const std::function<void(std::vector<std::pair<std::string,PeerId>>)>& callback) {
+	P2P_INIT_GUARD( 0 );
+	HUMBLENET_GUARD();
+	return internal_alias_query( query, callback );
+}
+
 /*
  * Send a message to a peer.
  */

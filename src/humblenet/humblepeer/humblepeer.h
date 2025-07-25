@@ -111,6 +111,9 @@ namespace humblenet {
 	ha_bool sendAliasUnregister(P2PSignalConnection *conn, const std::string& alias);
 	ha_bool sendAliasLookup(P2PSignalConnection *conn, const std::string& alias);
 	ha_bool sendAliasResolved(P2PSignalConnection *conn, const std::string& alias, PeerId peer);
+	ha_bool sendAliasQuery(P2PSignalConnection *conn, const std::string& alias);
+	ha_bool sendAliasQueryResolved(P2PSignalConnection *conn, const std::string& query,
+		std::vector<std::pair<std::string, PeerId> >& aliases);
 
 }  // namespace humblenet
 

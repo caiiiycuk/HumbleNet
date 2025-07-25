@@ -80,6 +80,7 @@ FEATURES
 	cxx_auto_type cxx_range_for
 LINK
 	humblenet
+	-g
 	${CAP_LIB}
 PROPERTIES
 	FOLDER HumbleNet/Tests

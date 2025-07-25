@@ -27,6 +27,9 @@ ha_bool internal_alias_unregister(const char* alias );
  */
 PeerId internal_alias_lookup(const char* alias );
 
+bool internal_alias_query( const char* query, const std::function<void(std::vector<std::pair<std::string,PeerId>>)>& callback );
+void internal_alias_query_result( const char* query, std::vector<std::pair<std::string,PeerId>> matches);
+
 /**
  * Is this peer id a vritual peer id
  */

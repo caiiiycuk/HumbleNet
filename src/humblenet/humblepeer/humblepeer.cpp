@@ -285,4 +285,34 @@ namespace humblenet {
 
 		return sendP2PMessage(conn, fbb);
 	}
+
+	ha_bool sendAliasQuery(P2PSignalConnection *conn, const std::string& alias)
+	{
+		flatbuffers::FlatBufferBuilder fbb(DEFAULT_FBB_SIZE);
+		auto packet = HumblePeer::CreateAliasRegister(fbb, fbb.CreateString(alias));
+		auto msg = HumblePeer::CreateMessage(fbb, HumblePeer::MessageType::AliasQuery, packet.Union());
+		fbb.Finish(msg);
+
+		return sendP2PMessage(conn, fbb);
+	}
+
+	ha_bool sendAliasQueryResolved(P2PSignalConnection *conn, const std::string& query,
+		std::vector<std::pair<std::string, PeerId> >& aliases) {
+
+		flatbuffers::FlatBufferBuilder fbb(DEFAULT_FBB_SIZE);
+
+		std::vector<flatbuffers::Offset<HumblePeer::AliasRecord>> records;
+		records.reserve(aliases.size());
+
+		for( auto& it : aliases) {
+			records.emplace_back(HumblePeer::CreateAliasRecord(fbb, fbb.CreateString(it.first), it.second));
+		}
+
+		auto packet = HumblePeer::CreateAliasQueryResult(
+			fbb, fbb.CreateString(query), fbb.CreateVector(records));
+		auto msg = HumblePeer::CreateMessage(fbb, HumblePeer::MessageType::AliasQueryResult, packet.Union());
+		fbb.Finish(msg);
+
+		return sendP2PMessage(conn, fbb);
+	}
 }  // namespace humblenet

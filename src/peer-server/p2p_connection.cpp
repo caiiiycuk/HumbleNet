@@ -314,6 +314,24 @@ namespace humblenet {
 			}
 				break;
 
+			case HumblePeer::MessageType::AliasQuery: {
+				auto aliasQuery = reinterpret_cast<const HumblePeer::AliasQuery*>(msg->message());
+				auto query = aliasQuery->query();
+				std::vector<std::pair<std::string, PeerId>> matched;
+
+				for (const auto& it: game->aliases) {
+					if (query->size() == 0 ||
+						(it.first.size() >= query->size() && strncmp(query->c_str(), it.first.c_str(), query->size()) == 0)) {
+						matched.emplace_back(it.first, it.second);
+					}
+				}
+
+				LOG_INFO("Query for aliases '%s' for peer %u resolved to %d/%d peers\n", query->c_str(), peerId,
+					matched.size(), game->aliases.size() );
+				sendAliasQueryResolved(this, query->c_str(), matched);
+			}
+				break;
+
 			default:
 				LOG_WARNING("Unhandled P2P Message: %s\n", HumblePeer::EnumNameMessageType(msgType));
 				break;

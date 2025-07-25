@@ -507,6 +507,19 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			internal_alias_resolved_to( resolved->alias()->c_str(), resolved->peerId() );
 		}
 			break;
+
+		case HumblePeer::MessageType::AliasQueryResult: {
+			auto aliasQuery = reinterpret_cast<const HumblePeer::AliasQueryResult*>(msg->message());
+			auto query = aliasQuery->query();
+			std::vector<std::pair<std::string, PeerId>> matched;
+
+			for (const auto& it: *aliasQuery->records()) {
+				matched.emplace_back(it->alias()->c_str(), it->peerId());
+			}
+
+			internal_alias_query_result(query->c_str(), std::move(matched));
+		}
+			break;
 			
 		default:
 			LOG("p2pSignalProcess unhandled %s\n", HumblePeer::EnumNameMessageType(msgType));

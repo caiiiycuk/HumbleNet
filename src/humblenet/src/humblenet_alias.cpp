@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <map>
+#include <utility>
 
 #define VIRTUAL_PEER 0x80000000
 
@@ -45,6 +46,23 @@ PeerId internal_alias_lookup( const char* name ) {
 	virtualPeerNames.insert( vpeer, name );
 
 	return vpeer;
+}
+
+bool internal_alias_query( const char* query, const std::function<void(std::vector<std::pair<std::string,PeerId>>)>& callback ) {
+	if (humbleNetState.pendingAliasQueryOut.find(query) == humbleNetState.pendingAliasQueryOut.end()) {
+		humbleNetState.pendingAliasQueryOut.insert( std::make_pair(query, callback) );
+		humblenet::sendAliasQuery(humbleNetState.p2pConn.get(), query);
+		return true;
+	}
+	return false;
+}
+
+void internal_alias_query_result( const char* query, std::vector<std::pair<std::string,PeerId>> matches) {
+	auto it = humbleNetState.pendingAliasQueryOut.find(query);
+	if (it != humbleNetState.pendingAliasQueryOut.end()) {
+		it->second(std::move(matches));
+		humbleNetState.pendingAliasQueryOut.erase(it);
+	}
 }
 
 void internal_alias_resolved_to( const std::string& alias, PeerId peer ) {
