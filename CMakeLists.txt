@@ -13,12 +13,32 @@ if(APPLE)
 	set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13 CACHE STRING "" FORCE)
 endif()
 
+set(BIN_FLATC "${CMAKE_CURRENT_LIST_DIR}/bin/flatc")
+
+if (EMSCRIPTEN)
+	set(FLATBUFFERS_BUILD_FLATC false)
+	if(NOT EXISTS "${BIN_FLATC}")
+		message(FATAL_ERROR "FLATC executable not found in ${BIN_FLATC}")
+	endif()
+else()
+	set(CAP_LIB "cap")
+endif()
+
 include(BoilerPlate)
 include(UtilityFunctions)
 
 add_subdirectory(3rdparty/flatbuffers)
-target_compile_options(flatc PUBLIC -Wno-error)
 target_compile_options(flatbuffers PUBLIC -Wno-error)
+if (FLATBUFFERS_BUILD_FLATC)
+	target_compile_options(flatc PUBLIC -Wno-error)
+	add_custom_target(bin_flatc
+			COMMAND
+				mkdir -p "${CMAKE_CURRENT_LIST_DIR}/bin"
+			COMMAND
+				cp $<TARGET_FILE:flatc> "${BIN_FLATC}"
+			DEPENDS $<TARGET_FILE:flatc>)
+	set(FLATC_DEPENDS bin_flatc)
+endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
@@ -36,13 +56,6 @@ if(LINUX OR APPLE)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden --std=c++14")
 endif()
-
-
-find_program(FLATC_EXECUTABLE
-	NAMES flatc
-	NO_CMAKE_FIND_ROOT_PATH
-)
-
 
 if(HUMBLENET_NATIVE)
 	include(ExternalProject)

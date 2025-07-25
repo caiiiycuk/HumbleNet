@@ -51,10 +51,10 @@ endif()
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
-    COMMAND flatc --cpp --scoped-enums
+    COMMAND "${BIN_FLATC}" --cpp --scoped-enums
             -o "."
             "${CMAKE_CURRENT_SOURCE_DIR}/humblepeer/humblepeer.fbs"
-    DEPENDS flatc)
+    DEPENDS "${FLATC_DEPENDS}")
 
 message(STATUS CMAKE_CURRENT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -93,7 +93,7 @@ CreateLibrary(humblepeer
 	PROPERTIES
 		FOLDER HumbleNet/Library
 	DEPENDS
-	"${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
+		"${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
 	)
 
 set(CORE_HUMBLENET

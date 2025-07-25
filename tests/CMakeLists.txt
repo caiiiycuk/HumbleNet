@@ -2,33 +2,37 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 
 set(HUMBLENET_SERVER_URL "ws://localhost:8080/ws" CACHE STRING "The peer server to use for the test apps")
 
-if(FLATC_EXECUTABLE)
-	GenerateFlatBuffer(test_peer_flatbuffers test_peer.fbs)
+add_custom_command(
+		OUTPUT  "${CMAKE_CURRENT_BINARY_DIR}/test_peer_flatbuffers.h"
+		COMMAND "${BIN_FLATC}" --cpp --scoped-enums
+		-o "."
+		"${CMAKE_CURRENT_SOURCE_DIR}/test_peer.fbs"
+		DEPENDS "${FLATC_DEPENDS}")
 
-	CreateTool(humblenet_test_peer
-	FILES
-		test_peer.cpp
-		${test_peer_flatbuffers}
-	REFERENCE
-		test_peer.fbs
-	DEFINES
-		HUMBLENET_SERVER_URL=\"${HUMBLENET_SERVER_URL}\"
-	FEATURES
-		cxx_auto_type cxx_range_for
-	INCLUDES
-		${CMAKE_CURRENT_BINARY_DIR}
-	LINK
-		humblenet
-		flatbuffers
-		-g
-	PROPERTIES
-		FOLDER HumbleNet/Tests
-	)
+CreateTool(humblenet_test_peer
+FILES
+	test_peer.cpp
+	"${CMAKE_CURRENT_BINARY_DIR}/test_peer_flatbuffers.h"
+REFERENCE
+	test_peer.fbs
+DEFINES
+	HUMBLENET_SERVER_URL=\"${HUMBLENET_SERVER_URL}\"
+FEATURES
+	cxx_auto_type cxx_range_for
+INCLUDES
+	${CMAKE_CURRENT_BINARY_DIR}
+LINK
+	humblenet
+	flatbuffers
+	${CAP_LIB}
+	-g
+PROPERTIES
+	FOLDER HumbleNet/Tests
+)
 
-	list(APPEND TEST_TARGETS
-		humblenet_test_peer
-	)
-endif()
+list(APPEND TEST_TARGETS
+	humblenet_test_peer
+)
 
 if(HUMBLENET_DESKTOP)
 	CreateTool(humblenet_test_webrtc
@@ -43,7 +47,7 @@ if(HUMBLENET_DESKTOP)
 		cxx_auto_type cxx_range_for
 	LINK
 		humblenet
-		cap
+		${CAP_LIB}
 		-g
 	PROPERTIES
 		FOLDER HumbleNet/Tests
@@ -76,7 +80,7 @@ FEATURES
 	cxx_auto_type cxx_range_for
 LINK
 	humblenet
-	cap
+	${CAP_LIB}
 PROPERTIES
 	FOLDER HumbleNet/Tests
 )

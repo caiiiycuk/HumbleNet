@@ -12,7 +12,7 @@ LINK
 	humblepeer
 	sha1
 	websockets
-	cap
+	${CAP_LIB}
 	${CMAKE_THREAD_LIBS_INIT}
 	${LWS_BORING_LIBS}
 	${LWS_BORING_INTERFACE}

@@ -88,7 +88,7 @@ void sendChat(const char* message)
 	flatbuffers::FlatBufferBuilder builder;
 	auto chatmsg = builder.CreateString(message);
 	auto hello = TestClient::CreateChat(builder, chatmsg);
-	auto msg = TestClient::CreateMessage(builder, TestClient::MessageSwitch_Chat, hello.Union());
+	auto msg = TestClient::CreateMessage(builder, TestClient::MessageSwitch::Chat, hello.Union());
 	builder.Finish(msg);
 
 	std::unordered_set<PeerId> toRemove;
@@ -115,7 +115,7 @@ bool sendHello(PeerId peer, bool isResponse = false)
 
 	flatbuffers::FlatBufferBuilder builder;
 	auto hello = TestClient::CreateHelloPeer(builder, buildKnownPeers(builder), isResponse);
-	auto msg = TestClient::CreateMessage(builder, TestClient::MessageSwitch_HelloPeer, hello.Union());
+	auto msg = TestClient::CreateMessage(builder, TestClient::MessageSwitch::HelloPeer, hello.Union());
 	builder.Finish(msg);
 
 	return sendMessage(peer, builder) >= 0;
@@ -134,7 +134,7 @@ void processMessage(PeerId peer, const char* buff, size_t length)
 
 	auto message_type = message->message_type();
 
-	if (message_type ==  TestClient::MessageSwitch_HelloPeer) {
+	if (message_type ==  TestClient::MessageSwitch::HelloPeer) {
 		auto hello = reinterpret_cast<const TestClient::HelloPeer*>(message->message());
 		std::cout << "Received hello from peer " << peer << " response " << hello->is_response() << std::endl;
 		connectedToPeer(peer);
@@ -145,11 +145,11 @@ void processMessage(PeerId peer, const char* buff, size_t length)
 		if (!hello->is_response()) {
 			sendHello(peer, true);
 		}
-	} else if (message_type == TestClient::MessageSwitch_Chat) {
+	} else if (message_type == TestClient::MessageSwitch::Chat) {
 		auto chat = reinterpret_cast<const TestClient::Chat*>(message->message());
 		std::cout << "Peer " << peer << ": " << chat->message()->str() << std::endl;
 	} else {
-		std::cout << "Unexpected message type received " << message_type << std::endl;
+		std::cout << "Unexpected message type received " << std::endl;
 	}
 }
 
