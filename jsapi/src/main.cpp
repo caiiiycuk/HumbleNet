@@ -54,3 +54,11 @@ extern "C" void EMSCRIPTEN_KEEPALIVE queryAliases(const char* query) {
         aliasQueryEnd();
     });
 }
+
+extern "C" int EMSCRIPTEN_KEEPALIVE sendto(const void* message, uint32_t length, PeerId topeer, SendMode sendmode) {
+    return humblenet_p2p_sendto(message, length, topeer, sendmode, 0);
+}
+
+extern "C" int EMSCRIPTEN_KEEPALIVE recvfrom(void* buffer, uint32_t length, PeerId* fromPeer) {
+    return humblenet_p2p_recvfrom(buffer, length, fromPeer, 0);
+}

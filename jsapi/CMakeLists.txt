@@ -2,7 +2,10 @@ add_executable(jsapi
     src/main.cpp
 )
 target_link_options(jsapi PRIVATE
-    -s EXPORTED_FUNCTIONS=['_malloc','_free']
+    -sINITIAL_MEMORY=16MB
+    -sMAXIMUM_MEMORY=16MB
+    -sALLOW_MEMORY_GROWTH=0
+    -sEXPORTED_FUNCTIONS=['_malloc','_free']
     -sDISABLE_EXCEPTION_CATCHING=0
     -sASSERTIONS=1
     -sMODULARIZE
