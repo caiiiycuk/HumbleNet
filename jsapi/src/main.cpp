@@ -62,3 +62,7 @@ extern "C" int EMSCRIPTEN_KEEPALIVE sendto(const void* message, uint32_t length,
 extern "C" int EMSCRIPTEN_KEEPALIVE recvfrom(void* buffer, uint32_t length, PeerId* fromPeer) {
     return humblenet_p2p_recvfrom(buffer, length, fromPeer, 0);
 }
+
+extern "C" void EMSCRIPTEN_KEEPALIVE disconnect(PeerId peer) {
+    humblenet_p2p_disconnect(peer);
+}
