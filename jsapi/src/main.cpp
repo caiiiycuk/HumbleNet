@@ -38,6 +38,10 @@ extern "C" void EMSCRIPTEN_KEEPALIVE registerAlias(const char* alias) {
     humblenet_p2p_register_alias(alias);
 }
 
+extern "C" void EMSCRIPTEN_KEEPALIVE unregisterAlias(const char* alias) {
+    humblenet_p2p_unregister_alias(alias);
+}
+
 EM_JS(void, aliasQueryAdd, (const char* alias, uint32_t peer), {
     Module.aliasQueryAdd(UTF8ToString(alias), peer);
 });
