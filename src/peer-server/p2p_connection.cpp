@@ -5,6 +5,7 @@
 #include "server.h"
 
 #include "humblenet_utils.h"
+#include "./db.h"
 
 
 namespace humblenet {
@@ -264,6 +265,7 @@ namespace humblenet {
 				} else {
 					if( existing == game->aliases.end() ) {
 						game->aliases.insert( std::make_pair( alias->c_str(), peerId ) );
+						db::get()->aliasAdded(alias->c_str(), peerId);
 					}
 					LOG_INFO("Registering alias '%s' to peer %u\n", alias->c_str(), peerId );
 	#pragma message ("TODO implement registration success")
@@ -280,6 +282,7 @@ namespace humblenet {
 					auto existing = game->aliases.find( alias->c_str() );
 
 					if( existing != game->aliases.end() && existing->second == peerId ) {
+						db::get()->aliasRemoved(alias->c_str());
 						game->aliases.erase( existing );
 
 						LOG_INFO("Unregistring alias '%s' for peer %u\n", alias->c_str(), peerId );
@@ -289,7 +292,14 @@ namespace humblenet {
 	#pragma message ("TODO implement unregister failure")
 					}
 				} else {
-					erase_value(game->aliases, peerId);
+					for( auto it = game->aliases.begin(); it != game->aliases.end(); ) {
+						if( it->second == peerId ) {
+							db::get()->aliasRemoved(it->first.c_str());
+							game->aliases.erase( it++ );
+						} else {
+							++it;
+						}
+					}
 
 					LOG_INFO("Unregistring all aliases for peer for peer %u\n", peerId );
 	#pragma message ("TODO implement unregister sucess")
