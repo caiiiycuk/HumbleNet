@@ -976,7 +976,7 @@ void ILibProcessAsyncSocket(struct ILibAsyncSocketModule *Reader, int pendingRea
 {
 	#ifndef MICROSTACK_NOTLS
 	int ssllen;
-	OSSL_HANDSHAKE_STATE sslstate;
+	int /*OSSL_HANDSHAKE_STATE*/ sslstate;
 	int sslerror;
 	SSL *wasssl;
 	#endif
@@ -1059,7 +1059,7 @@ void ILibProcessAsyncSocket(struct ILibAsyncSocketModule *Reader, int pendingRea
 			}
 
 			sslstate = SSL_get_state(Reader->ssl);
-			if (Reader->sslstate != 3 && sslstate == TLS_ST_CW_FINISHED)
+			if (Reader->sslstate != 3 && sslstate == 18 /*TLS_ST_CW_FINISHED*/)
 			{
 #ifdef MICROSTACK_TLS_DETECT
 				Reader->TLSHandshakeCompleted = 1;

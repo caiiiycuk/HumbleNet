@@ -38,6 +38,7 @@ limitations under the License.
 #include "ILibCrypto.h"
 
 #include "ILibRemoteLogging.h"
+#include "openssl/hmac.h"
 #ifdef _REMOTELOGGINGSERVER
 	#include "ILibWebServer.h"
 	#define ILibWebRTC_LoggingServerPort 0
@@ -45,7 +46,7 @@ limitations under the License.
 
 #ifdef OPENSSL_IS_BORINGSSL
 #define HMAC_CTX_free HMAC_CTX_cleanup
-inline HMAC_CTX* HMAC_CTX_new() { HMAC_CTX* ctx;  HMAC_CTX_init(ctx); return ctx; }
+// inline HMAC_CTX* HMAC_CTX_new() { HMAC_CTX* ctx;  HMAC_CTX_init(ctx); return ctx; }
 #endif
 
 #define STUN_NUM_ADDR 5
