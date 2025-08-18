@@ -154,15 +154,19 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 #error No Shared library open support
 #endif
 
+#ifdef LOAD_WEBRTC_SO
 static void* dllHandle = nullptr;
+#endif
 
 static void webrtc_UnloadLibrary()
 {
 	// set to internal implementation
 	fn_table = fn_microstack;
 
+#ifdef LOAD_WEBRTC_SO
 	UnloadObject(dllHandle);
 	dllHandle = nullptr;
+#endif
 }
 
 #ifdef WIN32
@@ -175,6 +179,7 @@ static void webrtc_UnloadLibrary()
 
 static void webrtc_LoadLibrary()
 {
+#ifdef LOAD_WEBRTC_SO
 	dllHandle = LoadObject(WEBRTC_LIBRARY);
 #ifdef __linux__
 	if (!dllHandle) {
@@ -230,6 +235,9 @@ static void webrtc_LoadLibrary()
 	} else {
 		fn_table = fn_microstack;
 	}
+#else
+		fn_table = fn_microstack;
+#endif
 }
 
 #endif

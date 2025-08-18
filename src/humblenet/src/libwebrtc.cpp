@@ -225,7 +225,6 @@ void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** ser
 void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password)
 {
 	// WARNING completely untested, you will need to fix this if you want to use it
-	assert(0);
 	sockaddr_in6 turnServer;
 	// TODO: get port from server string, example code in ILibWrapperWebRTC.c for stun servers
 	int port = 3478;
@@ -368,8 +367,10 @@ int libwebrtc_add_ice_candidate( struct libwebrtc_connection* conn, const char* 
 	
 	// todo, parse candidate into struct sockaddr_in6 and add to the offer...
 	char* offer = ILibWrapper_WebRTC_Connection_AddServerReflexiveCandidateToRemoteSDP(connection, address, port );
-	::libwebrtc_set_answer(conn, offer );
-	free(offer);
+	if (offer) {
+		::libwebrtc_set_answer(conn, offer );
+		free(offer);
+	}
 	
 	return 1;
 }
