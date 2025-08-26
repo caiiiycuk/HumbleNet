@@ -11,6 +11,10 @@
 #include <stdio.h>
 #include <algorithm>
 
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#endif
+
 struct datagram_connection {
 	Connection*			conn;			// established connection.
 	PeerId				peer;			// "address"
@@ -58,6 +62,13 @@ static void datagram_flush( datagram_connection& dg, const char* reason ) {
 			dg.buf_out.pop_front();
 			if( ret < 0 ) {
 				LOG("Error flushing packets: %s\n", humblenet_get_error() );
+#ifdef EMSCRIPTEN
+				EM_ASM((
+					if (Module.onNetworkError) {
+						Module.onNetworkError($0);
+					}
+				), dg.peer);
+#endif
 				humblenet_clear_error();
 			}
 		}

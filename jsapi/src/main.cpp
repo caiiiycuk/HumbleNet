@@ -3,6 +3,7 @@
 //
 #include <cstdio>
 #include <emscripten.h>
+#include <string.h>
 
 #include "humblenet.h"
 #include "humblenet_p2p.h"
@@ -42,20 +43,22 @@ extern "C" void EMSCRIPTEN_KEEPALIVE unregisterAlias(const char* alias) {
     humblenet_p2p_unregister_alias(alias);
 }
 
-EM_JS(void, aliasQueryAdd, (const char* alias, uint32_t peer), {
-    Module.aliasQueryAdd(UTF8ToString(alias), peer);
+EM_JS(void, aliasQueryAdd, (const char* query, const char* alias, uint32_t peer), {
+    Module.aliasQueryAdd(UTF8ToString(query), UTF8ToString(alias), peer);
 });
 
-EM_JS(void, aliasQueryEnd, (), {
-    Module.onAliasQueryEnd();
+EM_JS(void, aliasQueryEnd, (const char* query), {
+    Module.onAliasQueryEnd(UTF8ToString(query));
 });
 
-extern "C" void EMSCRIPTEN_KEEPALIVE queryAliases(const char* query) {
-    humblenet_p2p_alias_query(query, [](std::vector<std::pair<std::string, PeerId>> matches) {
+extern "C" void EMSCRIPTEN_KEEPALIVE queryAliases(const char* cquery) {
+    char* query = strdup(cquery);
+    humblenet_p2p_alias_query(query, [query](std::vector<std::pair<std::string, PeerId>> matches) {
         for (const auto& match : matches) {
-            aliasQueryAdd(match.first.c_str(), match.second);
+            aliasQueryAdd(query, match.first.c_str(), match.second);
         }
-        aliasQueryEnd();
+        aliasQueryEnd(query);
+        free(query);
     });
 }
 

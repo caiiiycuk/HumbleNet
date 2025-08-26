@@ -338,6 +338,22 @@ namespace humblenet {
 				auto aliasQuery = reinterpret_cast<const HumblePeer::AliasQuery*>(msg->message());
 				auto query = std::string(aliasQuery->query()->c_str());
 
+				if (!query.empty() && query[0] == '=') {
+					auto cmp = query.substr(1, query.length()-1);
+					std::vector<std::pair<std::string, PeerId>> matched;
+					for (const auto& it: game->aliases) {
+						if (it.first == cmp) {
+							matched.emplace_back(it.first, it.second);
+						}
+					}
+
+					LOG_INFO("Query for alias '%s' for peer %u resolved to %d peers\n", query.c_str(), peerId,
+						matched.size(), game->aliases.size() );
+
+					sendAliasQueryResolved(this, query, matched);
+					return true;
+				}
+
 				if (now - updatedAt > 1000 || cachedQuery != query) {
 					matched.clear();
 					for (const auto& it: game->aliases) {
