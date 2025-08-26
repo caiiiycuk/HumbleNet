@@ -283,7 +283,7 @@ struct lws_protocols protocols_8080[] = {
 	, { NULL, NULL, 0 }
 };
 
-struct lws_protocols protocols_443[] = {
+struct lws_protocols protocols_444[] = {
 	  { "humblepeer", callback_humblepeer, 1 }
 	, acme_plugin_protocol
 
@@ -453,15 +453,15 @@ int main(int argc, char *argv[]) {
 	if (email == nullptr || common_name == nullptr) {
 		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
 	} else {
-		info.protocols = protocols_443;
+		info.protocols = protocols_444;
 		info.port = 444;
 		info.vhost_name = "SSL_vhost";
 		info.ssl_cert_filepath = "./peer-server.key.crt";
 		info.ssl_private_key_filepath = "./peer-server.key.pem";
 		info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
-		struct lws_vhost *host_443 = lws_create_vhost(peerServer->context, &info);
-		if (host_443 == NULL) {
-			LOG_ERROR("Failed to create vhost for port 443\n");
+		struct lws_vhost *host_444 = lws_create_vhost(peerServer->context, &info);
+		if (host_444 == NULL) {
+			LOG_ERROR("Failed to create vhost for port 444\n");
 			exit(1);
 		}
 	}
