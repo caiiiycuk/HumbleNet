@@ -1,5 +1,7 @@
 #include "p2p_connection.h"
 
+#include <chrono>
+
 #include "logging.h"
 #include "game.h"
 #include "server.h"
@@ -325,20 +327,36 @@ namespace humblenet {
 				break;
 
 			case HumblePeer::MessageType::AliasQuery: {
-				auto aliasQuery = reinterpret_cast<const HumblePeer::AliasQuery*>(msg->message());
-				auto query = aliasQuery->query();
-				std::vector<std::pair<std::string, PeerId>> matched;
+				static std::vector<std::pair<std::string, PeerId>> matched;
+				static std::string cachedQuery = "";
+				static long updatedAt = 0;
 
-				for (const auto& it: game->aliases) {
-					if (query->size() == 0 ||
-						(it.first.size() >= query->size() && strncmp(query->c_str(), it.first.c_str(), query->size()) == 0)) {
-						matched.emplace_back(it.first, it.second);
+				auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()
+				).count();
+
+				auto aliasQuery = reinterpret_cast<const HumblePeer::AliasQuery*>(msg->message());
+				auto query = std::string(aliasQuery->query()->c_str());
+
+				if (now - updatedAt > 1000 || cachedQuery != query) {
+					matched.clear();
+					for (const auto& it: game->aliases) {
+						if (query.length() == 0 || it.first.find(query) == 0) {
+							matched.emplace_back(it.first, it.second);
+						}
 					}
+
+					LOG_INFO("Query for aliases '%s' for peer %u resolved to %d/%d peers\n", query.c_str(), peerId,
+						matched.size(), game->aliases.size() );
+
+					cachedQuery = query;
+					updatedAt = now;
+				} else {
+					LOG_INFO("[CACHE] Query for aliases '%s' for peer %u resolved to %d/%d peers\n", query.c_str(), peerId,
+						matched.size(), game->aliases.size() );
 				}
 
-				LOG_INFO("Query for aliases '%s' for peer %u resolved to %d/%d peers\n", query->c_str(), peerId,
-					matched.size(), game->aliases.size() );
-				sendAliasQueryResolved(this, query->c_str(), matched);
+				sendAliasQueryResolved(this, query, matched);
 			}
 				break;
 
