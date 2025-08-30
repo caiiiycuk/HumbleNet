@@ -104,8 +104,10 @@ struct lws_context* lws_create_context_extended( struct lws_context_creation_inf
 			this.destroy();
 		};
 		libwebsocket.destroy = function() {
-			libwebsocket.sockets.set( this.id, undefined );
-			libwebsocket.on_event( this.protocol_id, ctx, this.id, 11, this.user_data, 0, 0 );
+			if(libwebsocket.sockets.has( this.id ) && libwebsocket.sockets.get( this.id ) !== undefined) {
+				libwebsocket.sockets.set( this.id, undefined );
+				libwebsocket.on_event( this.protocol_id, ctx, this.id, 11, this.user_data, 0, 0 );
+			}
 		};
 
 		Module.__libwebsocket = libwebsocket;
