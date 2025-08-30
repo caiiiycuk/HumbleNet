@@ -84,8 +84,11 @@ int websocket_protocol(  struct lws *wsi
 
 		case LWS_CALLBACK_WSI_DESTROY: {
 			ret = socket->callbacks.on_destroy( socket, socket->user_data );
+// TODO: @caiiiycuk: for some reasons in em version this results in segfault
+#ifndef EMSCRIPTEN
 			if( socket->owner )
 				delete socket;
+#endif
 		}
 		break;
 
