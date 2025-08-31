@@ -92,7 +92,7 @@ namespace humblenet {
 		if (conn->wsi != s) {
 			// this connection is not the one currently active in humbleNetState.
 			// this one must be obsolete, close it
-			return -1;
+			return -2;
 		}
 		// platform info
 		std::string pinfo;
@@ -161,7 +161,7 @@ namespace humblenet {
 			// something went wrong, close the connection
 			// don't humblenet_set_error, sendHelloServer should have done that
 			humbleNetState.p2pConn.reset();
-			return -1;
+			return -3;
 		}
 		return 0;
 	}
@@ -365,7 +365,7 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			PeerId peer = static_cast<PeerId>(hello->peerId());
 
 			if (humbleNetState.myPeerId != 0) {
-				LOG("Error: got HelloClient but we already have a peer id\n");
+				LOG("Error: got HelloClient but we already have a peer id my:  %d, new: %d\n", humbleNetState.myPeerId, peer);
 				return true;
 			}
 			LOG("My peer id is %u\n", peer);

@@ -39,25 +39,71 @@ struct lws_context* lws_create_context_extended( struct lws_context_creation_inf
 		var libwebsocket = {};
 		var ctx = $0;
 
+		let send_queue = [];
+		const web_sockets = {};
+		window.test_close_sockets = function() {
+			for (const socket of Object.values(web_sockets)) {
+				socket.close();
+			}
+		};
+
+		setInterval(() => {
+			for (const socket of libwebsocket.sockets.values()) {
+				const url = socket.url;
+				if (!web_sockets[url]) {
+					console.log("Creating web socket for", url, socket.protocol);
+					const web_socket = new WebSocket(url, socket.protocol);
+					web_sockets[url] = web_socket;
+
+					web_socket.binaryType = "arraybuffer";
+					web_socket.onopen = () => {
+						libwebsocket.on_connect.apply(socket);
+					};
+					web_socket.onerror = (e) => {
+						console.error("Web socket error for", url, e);
+						web_socket.close();
+					};
+					web_socket.onclose = () => {
+						console.log("Web socket closed for", url);
+						delete web_sockets[url];
+					};
+					web_socket.onmessage = (event) => {
+						libwebsocket.on_message.apply(socket, [event]);
+					};
+				}
+			}
+
+			if (send_queue.length > 0) {
+				const new_send_queue = [];
+				for (const item of send_queue) {
+					const web_socket = web_sockets[item.socket.url];
+					if (web_socket && web_socket.readyState === 1) {
+						web_socket.send(item.data);
+					} else {
+						new_send_queue.push(item);
+					}
+				}
+				send_queue = new_send_queue;
+			}
+		}, 16);
+
 		libwebsocket.sockets = new Map();
 		libwebsocket.on_event = Module.cwrap('lws_helper', 'number', ['number', 'number', 'number', 'number', 'number', 'number', 'number']);
 		libwebsocket.connect = function( url, protocol, user_data ) {
 			try {
-				var socket = new WebSocket(url,protocol);
-				socket.binaryType = "arraybuffer";
+				const socket = {};
+				socket.url = url;
 				socket.user_data = user_data;
+				socket.protocol = protocol;
 				socket.protocol_id = 0;
-
-				socket.onopen = this.on_connect;
-				socket.onmessage = this.on_message;
-				socket.onclose = this.on_close;
-				socket.onerror = this.on_error;
-				socket.destroy = this.destroy;
-
 				socket.id = this.sockets.size + 1;
-
+				socket.send = function(data) {
+					send_queue.push({
+						socket,
+						data,
+					});
+				};
 				this.sockets.set( socket.id, socket );
-
 				return socket;
 			} catch(e) {
 				Module.out("Socket creation failed:" + e);
@@ -137,7 +183,7 @@ struct lws* lws_client_connect_extended(struct lws_context* ctx , const char* ur
 int lws_write( struct lws* socket, const void* data, int len, enum lws_write_protocol protocol ) {
 	return EM_ASM_INT({
 		var socket = Module.__libwebsocket.sockets.get( $0 );
-		if( ! socket || socket.readyState !== 1) {
+		if( ! socket ) {
 			return -1;
 		}
 
