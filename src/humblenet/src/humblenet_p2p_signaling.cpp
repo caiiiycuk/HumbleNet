@@ -247,6 +247,7 @@ namespace humblenet {
 
 				// handle retry...
 				humbleNetState.p2pConn.reset();
+				humbleNetState.myPeerId = 0;
 
 				return 0;
 			}
