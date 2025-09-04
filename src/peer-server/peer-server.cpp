@@ -30,7 +30,7 @@
 #include "humblenet.h"
 #include "humblepeer.h"
 
-#include "game.h"
+#include "catalog.h"
 #include "p2p_connection.h"
 #include "server.h"
 #include "logging.h"
@@ -54,7 +54,7 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 }
 
 static bool lookup_peer_impl(const std::string& hostname) {
-	auto& aliases = peerServer->game->aliases;
+	auto& aliases = peerServer->catalog->aliases;
 	return aliases.find(hostname) != aliases.end();
 }
 
@@ -62,7 +62,7 @@ static bool lookup_peer(const std::string& hostname) {
 	auto found = lookup_peer_impl(hostname);
 	if (!found) {
 		std::string aliases = "";
-		for (auto &game : peerServer->game->aliases) {
+		for (auto &game : peerServer->catalog->aliases) {
 			aliases += game.first + ", ";
 		}
 
@@ -185,15 +185,15 @@ int callback_humblepeer(struct lws *wsi
 
 			if (conn->peerId != 0) {
 				// remove it from list of peers
-				assert(conn->game != NULL);
-				auto it2 = conn->game->peers.find(conn->peerId);
+				assert(conn->catalog != NULL);
+				auto it2 = conn->catalog->peers.find(conn->peerId);
 				// if peerId is valid (nonzero)
 				// this MUST exist
-				assert(it2 != conn->game->peers.end());
-				conn->game->peers.erase(it2);
+				assert(it2 != conn->catalog->peers.end());
+				conn->catalog->peers.erase(it2);
 
 				// remove any aliases to this peer
-				conn->game->erasePeerAliases(conn->peerId);
+				conn->catalog->erasePeerAliases(conn->peerId);
 			}
 
 			// and finally remove from list of signal connections

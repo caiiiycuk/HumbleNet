@@ -2,12 +2,12 @@
 
 #include "humblenet.h"
 #include "humblepeer.h"
-#include "game.h"
+#include "catalog.h"
 
 struct lws;
 
 namespace humblenet {
-	struct Game;
+	struct Catalog;
 	struct Server;
 
 	enum HumblePeerState {
@@ -29,7 +29,7 @@ namespace humblenet {
 		bool webRTCsupport;
 		bool trickleICE;
 
-		Game *game;
+		Catalog *catalog;
 
 		std::string url;
 
@@ -45,7 +45,7 @@ namespace humblenet {
 		, state(Opening)
 		, webRTCsupport(false)
 		, trickleICE(true)
-		, game(NULL)
+		, catalog(NULL)
 		{
 		}
 

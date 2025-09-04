@@ -3,7 +3,7 @@
 #include <chrono>
 
 #include "logging.h"
-#include "game.h"
+#include "catalog.h"
 #include "server.h"
 
 #include "humblenet_utils.h"
@@ -43,8 +43,8 @@ namespace humblenet {
 					return true;
 				}
 
-				auto it = game->peers.find(peer);
-				if (it == game->peers.end()) {
+				auto it = catalog->peers.find(peer);
+				if (it == catalog->peers.end()) {
 					LOG_WARNING(", no such peer\n");
 					sendNoSuchPeer(this, peer);
 				} else {
@@ -80,9 +80,9 @@ namespace humblenet {
 				// look up target peer, send message on
 				// TODO: should only send if peers are currently negotiating connection
 
-				auto it = game->peers.find(peer);
+				auto it = catalog->peers.find(peer);
 
-				if (it == game->peers.end()) {
+				if (it == catalog->peers.end()) {
 					LOG_WARNING("P2PResponse from peer %u (%s) to nonexistent peer %u\n", this->peerId, this->url.c_str(), peer);
 					sendNoSuchPeer(this, peer);
 					return true;
@@ -118,9 +118,9 @@ namespace humblenet {
 				// look up target peer, send message on
 				// TODO: should only send if peers are currently negotiating connection
 
-				auto it = game->peers.find(peer);
+				auto it = catalog->peers.find(peer);
 
-				if (it == game->peers.end()) {
+				if (it == catalog->peers.end()) {
 					LOG_WARNING(", no such peer\n");
 					sendNoSuchPeer(this, peer);
 				} else {
@@ -137,9 +137,9 @@ namespace humblenet {
 				auto p2p = reinterpret_cast<const HumblePeer::P2PReject*>(msg->message());
 				auto peer = p2p->peerId();
 
-				auto it = game->peers.find(peer);
+				auto it = catalog->peers.find(peer);
 				// TODO: check there's such a connection attempt ongoing
-				if (it == game->peers.end()) {
+				if (it == catalog->peers.end()) {
 					switch (p2p->reason()) {
 						case HumblePeer::P2PRejectReason::PeerRefused:
 							LOG_WARNING("Peer %u (%s) tried to refuse connection from nonexistent peer %u\n", peerId, url.c_str(), peer);
@@ -182,8 +182,8 @@ namespace humblenet {
 
 #pragma message ("TODO handle user authentication")
 
-				this->game = peerServer->getVerifiedGame(hello);
-				if (this->game == NULL) {
+				this->catalog = peerServer->getVerifiedGame(hello);
+				if (this->catalog == NULL) {
 					// invalid game
 					return false;
 				}
@@ -198,10 +198,10 @@ namespace humblenet {
 				}
 
 				// generate peer id for this peer
-				peerId = this->game->generateNewPeerId();
+				peerId = this->catalog->generateNewPeerId();
 				LOG_INFO("Got hello from \"%s\" (peer %u, game %u, platform: %s)\n", url.c_str(), peerId, this->game->gameId, platform ? platform->c_str(): "");
 
-				game->peers.insert(std::make_pair(peerId, this));
+				catalog->peers.insert(std::make_pair(peerId, this));
 				this->webRTCsupport = true;
 				this->trickleICE = !(hello->flags() & 0x2);
 
@@ -240,9 +240,9 @@ namespace humblenet {
 
 				LOG_INFO("P2PRelayData relaying %d bytes from peer %u to %u\n", data->Length(), this->peerId, peer );
 
-				auto it = game->peers.find(peer);
+				auto it = catalog->peers.find(peer);
 
-				if (it == game->peers.end()) {
+				if (it == catalog->peers.end()) {
 					LOG_WARNING(", no such peer\n");
 					sendNoSuchPeer(this, peer);
 				} else {
@@ -259,14 +259,14 @@ namespace humblenet {
 				auto reg = reinterpret_cast<const HumblePeer::AliasRegister*>(msg->message());
 				auto alias = reg->alias();
 
-				auto existing = game->aliases.find( alias->c_str() );
+				auto existing = catalog->aliases.find( alias->c_str() );
 
-				if( existing != game->aliases.end() && existing->second != peerId ) {
+				if( existing != catalog->aliases.end() && existing->second != peerId ) {
 					LOG_INFO("Rejecting peer %u's request to register alias '%s' which is already registered to peer %u\n", peerId, alias->c_str(), existing->second );
 	#pragma message ("TODO implement registration failure")
 				} else {
-					if( existing == game->aliases.end() ) {
-						game->aliases.insert( std::make_pair( alias->c_str(), peerId ) );
+					if( existing == catalog->aliases.end() ) {
+						catalog->aliases.insert( std::make_pair( alias->c_str(), peerId ) );
 						db::get()->aliasAdded(alias->c_str(), peerId);
 					}
 					LOG_INFO("Registering alias '%s' to peer %u\n", alias->c_str(), peerId );
@@ -281,11 +281,11 @@ namespace humblenet {
 				auto alias = unreg->alias();
 
 				if (alias) {
-					auto existing = game->aliases.find( alias->c_str() );
+					auto existing = catalog->aliases.find( alias->c_str() );
 
-					if( existing != game->aliases.end() && existing->second == peerId ) {
+					if( existing != catalog->aliases.end() && existing->second == peerId ) {
 						db::get()->aliasRemoved(alias->c_str());
-						game->aliases.erase( existing );
+						catalog->aliases.erase( existing );
 
 						LOG_INFO("Unregistring alias '%s' for peer %u\n", alias->c_str(), peerId );
 	#pragma message ("TODO implement unregister sucess")
@@ -294,10 +294,10 @@ namespace humblenet {
 	#pragma message ("TODO implement unregister failure")
 					}
 				} else {
-					for( auto it = game->aliases.begin(); it != game->aliases.end(); ) {
+					for( auto it = catalog->aliases.begin(); it != catalog->aliases.end(); ) {
 						if( it->second == peerId ) {
 							db::get()->aliasRemoved(it->first.c_str());
-							game->aliases.erase( it++ );
+							catalog->aliases.erase( it++ );
 						} else {
 							++it;
 						}
@@ -314,9 +314,9 @@ namespace humblenet {
 				auto lookup = reinterpret_cast<const HumblePeer::AliasLookup*>(msg->message());
 				auto alias = lookup->alias();
 
-				auto existing = game->aliases.find( alias->c_str() );
+				auto existing = catalog->aliases.find( alias->c_str() );
 
-				if( existing != game->aliases.end() ) {
+				if( existing != catalog->aliases.end() ) {
 					LOG_INFO("Lookup of alias '%s' for peer %u resolved to peer %u\n", alias->c_str(), peerId, existing->second );
 					sendAliasResolved(this, alias->c_str(), existing->second);
 				} else {
@@ -341,7 +341,7 @@ namespace humblenet {
 				if (!query.empty() && query[0] == '=') {
 					auto cmp = query.substr(1, query.length()-1);
 					std::vector<std::pair<std::string, PeerId>> matched;
-					for (const auto& it: game->aliases) {
+					for (const auto& it: catalog->aliases) {
 						if (it.first == cmp) {
 							matched.emplace_back(it.first, it.second);
 						}
@@ -356,7 +356,7 @@ namespace humblenet {
 
 				if (now - updatedAt > 1000 || cachedQuery != query) {
 					matched.clear();
-					for (const auto& it: game->aliases) {
+					for (const auto& it: catalog->aliases) {
 						if (query.length() == 0 || it.first.find(query) == 0) {
 							matched.emplace_back(it.first, it.second);
 						}

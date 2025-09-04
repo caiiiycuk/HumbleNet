@@ -5,11 +5,11 @@
 namespace humblenet {
 	Server::Server()
 	: context(NULL),
-	game(new Game(0))
+	catalog(new Catalog())
 	{
 	}
 
-	Game *Server::getVerifiedGame(const HumblePeer::HelloServer* hello)
+	Catalog *Server::getVerifiedGame(const HumblePeer::HelloServer* hello)
 	{
 		auto gameToken = hello->gameToken();
 		auto gameSignature = hello->gameSignature();
@@ -19,7 +19,7 @@ namespace humblenet {
 			return nullptr;
 		}
 
-		return game.get();
+		return catalog.get();
 	}
 
 	void Server::triggerWrite(struct lws *wsi)

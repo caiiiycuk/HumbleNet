@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game.h"
+#include "catalog.h"
 #include "p2p_connection.h"
 
 #include <unordered_map>
@@ -18,7 +18,7 @@ namespace humblenet {
 		// websocket (for the receive callback) and peer id (when sending stuff)
 		std::unordered_map<struct lws *, std::unique_ptr<P2PSignalConnection> > signalConnections;
 
-		std::unique_ptr<Game> game;
+		std::unique_ptr<Catalog> catalog;
 
 		std::string stunServerAddress;
 		std::string turnServer;
@@ -28,7 +28,7 @@ namespace humblenet {
 
 		Server();
 
-		Game *getVerifiedGame(const HumblePeer::HelloServer* hello);
+		Catalog *getVerifiedGame(const HumblePeer::HelloServer* hello);
 		void populateStunServers(std::vector<ICEServer>& servers);
 		void triggerWrite(struct lws* wsi);
 	};
