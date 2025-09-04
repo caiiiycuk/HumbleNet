@@ -1,25 +1,11 @@
 #include "server.h"
 #include "logging.h"
-#include "hmac.h"
 
 namespace humblenet {
 	Server::Server()
 	: context(NULL),
 	catalog(new Catalog())
 	{
-	}
-
-	Catalog *Server::getVerifiedGame(const HumblePeer::HelloServer* hello)
-	{
-		auto gameToken = hello->gameToken();
-		auto gameSignature = hello->gameSignature();
-
-		if (!gameToken || !gameSignature) {
-			LOG_ERROR("No game token provided!\n");
-			return nullptr;
-		}
-
-		return catalog.get();
 	}
 
 	void Server::triggerWrite(struct lws *wsi)

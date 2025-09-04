@@ -182,7 +182,7 @@ namespace humblenet {
 
 #pragma message ("TODO handle user authentication")
 
-				this->catalog = peerServer->getVerifiedGame(hello);
+				this->catalog = peerServer->catalog.get();
 				if (this->catalog == NULL) {
 					// invalid game
 					return false;

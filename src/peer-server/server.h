@@ -28,7 +28,6 @@ namespace humblenet {
 
 		Server();
 
-		Catalog *getVerifiedGame(const HumblePeer::HelloServer* hello);
 		void populateStunServers(std::vector<ICEServer>& servers);
 		void triggerWrite(struct lws* wsi);
 	};
