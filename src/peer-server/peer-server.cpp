@@ -54,10 +54,26 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 	return reinterpret_cast<P2PSignalConnection *>(user_data)->processMsg(msg);
 }
 
-static bool lookup_peer(const std::string& hostname) {
+static bool lookup_peer_impl(const std::string& hostname) {
 	if (peerServer->games.empty()) return false;
 	auto& aliases = peerServer->games.begin()->second->aliases;
 	return aliases.find(hostname) != aliases.end();
+}
+
+static bool lookup_peer(const std::string& hostname) {
+	auto found = lookup_peer_impl(hostname);
+	if (!found) {
+		std::string aliases = "";
+		if (!peerServer->games.empty()) {
+			for (auto &game : peerServer->games.begin()->second->aliases) {
+				aliases += game.first + ", ";
+			}
+		}
+
+		LOG_WARNING("lookup_peer: could not find host %s in (%s), games count %d\n", hostname.c_str(), aliases.c_str(), peerServer->games.size());
+	}
+
+	return found;
 }
 
 static const char* get_http_body(void *user) {
@@ -378,8 +394,7 @@ int main(int argc, char *argv[]) {
 	
 	}
 
-	// logFileOpen("peer-server.log");
-	logFileOpen("");
+	logFileOpen("peer-server.log");
 	lws_set_log_level(LLL_ERR | LLL_WARN, NULL);
 	// lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO | LLL_DEBUG | LLL_EXT, NULL);
 
