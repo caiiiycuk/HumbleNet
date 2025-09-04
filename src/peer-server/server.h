@@ -11,8 +11,6 @@ struct lws_context;
 struct lws;
 
 namespace humblenet {
-	class GameDB;
-
 	struct Server {
 		struct lws_context *context;
 
@@ -20,7 +18,7 @@ namespace humblenet {
 		// websocket (for the receive callback) and peer id (when sending stuff)
 		std::unordered_map<struct lws *, std::unique_ptr<P2PSignalConnection> > signalConnections;
 
-		std::unordered_map<GameId, std::unique_ptr<Game> > games;
+		std::unique_ptr<Game> game;
 
 		std::string stunServerAddress;
 		std::string turnServer;
@@ -28,14 +26,11 @@ namespace humblenet {
 		std::string turnPassword;
 
 
-		Server(std::shared_ptr<GameDB> _gameDB);
+		Server();
 
 		Game *getVerifiedGame(const HumblePeer::HelloServer* hello);
 		void populateStunServers(std::vector<ICEServer>& servers);
 		void triggerWrite(struct lws* wsi);
-
-	private:
-		std::shared_ptr<GameDB> m_gameDB;
 	};
 
 }

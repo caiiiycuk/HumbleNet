@@ -34,7 +34,6 @@
 #include "p2p_connection.h"
 #include "server.h"
 #include "logging.h"
-#include "game_db.h"
 
 using namespace humblenet;
 
@@ -55,8 +54,7 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 }
 
 static bool lookup_peer_impl(const std::string& hostname) {
-	if (peerServer->games.empty()) return false;
-	auto& aliases = peerServer->games.begin()->second->aliases;
+	auto& aliases = peerServer->game->aliases;
 	return aliases.find(hostname) != aliases.end();
 }
 
@@ -64,13 +62,11 @@ static bool lookup_peer(const std::string& hostname) {
 	auto found = lookup_peer_impl(hostname);
 	if (!found) {
 		std::string aliases = "";
-		if (!peerServer->games.empty()) {
-			for (auto &game : peerServer->games.begin()->second->aliases) {
-				aliases += game.first + ", ";
-			}
+		for (auto &game : peerServer->game->aliases) {
+			aliases += game.first + ", ";
 		}
 
-		LOG_WARNING("lookup_peer: could not find host %s in (%s), games count %d\n", hostname.c_str(), aliases.c_str(), peerServer->games.size());
+		LOG_WARNING("lookup_peer: could not find host %s in (%s)\n", hostname.c_str(), aliases.c_str());
 	}
 
 	return found;
@@ -406,12 +402,7 @@ int main(int argc, char *argv[]) {
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
 
-	std::shared_ptr<GameDB> gameDB;
-
-	gameDB.reset(new GameDBAnonymous());
-	// gameDB.reset(new GameDBFlatFile(config.gameDB.substr(5)));
-
-	peerServer.reset(new Server(gameDB));
+	peerServer.reset(new Server());
 	// peerServer->stunServerAddress = "stun.cloudflare.com:3478";
 	if (turn_server) {
 		peerServer->turnServer = turn_server;
