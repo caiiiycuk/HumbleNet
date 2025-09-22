@@ -161,9 +161,6 @@ int HUMBLENET_CALL humblenet_p2p_sendto(const void* message, uint32_t length, Pe
 
 	if( sendmode & SEND_RELIABLE_BUFFERED )
 		flags = HUMBLENET_MSG_BUFFERED;
-	// if were still connecting and reliable, treat it as a buffered request
-	else if( conn->status == HUMBLENET_CONNECTION_CONNECTING )
-		flags = HUMBLENET_MSG_BUFFERED;
 
 	int ret = humblenet_datagram_send( message, length, flags, conn, channel );
 	TRACE("Sent packet for channel %d to %u(%u): %d\n", channel, topeer, conn->otherPeer, ret );
