@@ -104,12 +104,6 @@ void __fastcall util_openssl_init()
 #endif
 */
 
-#ifndef OPENSSL_IS_BORINGSSL
-	SSLeay_add_all_algorithms();
-	SSLeay_add_all_ciphers();
-	SSLeay_add_all_digests();
-#endif
-
 	SSL_library_init(); // TWO LEAKS COMING FROM THIS LINE. Seems to be a well known OpenSSL problem.
 	SSL_load_error_strings();
 	ERR_load_crypto_strings(); // ONE LEAK IN LINUX
@@ -571,7 +565,10 @@ void __fastcall util_printcert(struct util_cert cert)
 void __fastcall util_printcert_pk(struct util_cert cert)
 {
 	if (cert.pkey == NULL) return;
-	RSA_print_fp(stdout,cert.pkey->pkey.rsa,0);
+    RSA *rsa = EVP_PKEY_get0_RSA(cert.pkey);
+    if (rsa) {
+        RSA_print_fp(stdout, rsa, 0);
+    }
 }
 #endif
 
@@ -592,10 +589,6 @@ int __fastcall util_mkCert(struct util_cert *rootcert, struct util_cert* cert, i
 	BIGNUM *oBigNbr;
 	char *public_key;
 	int public_key_len;
-
-#ifndef OPENSSL_IS_BORINGSSL
-	MemCheck_on();
-#endif
 
 	if (initialcert != NULL)
 	{
@@ -1053,7 +1046,8 @@ int __fastcall util_rsaverify(X509 *cert, char* data, int datalen, char* sign, i
 	SHA1_Final((unsigned char*)hash, &c);
 	pkey = X509_get_pubkey(cert);
 	rsa = EVP_PKEY_get1_RSA(pkey);
-	rsa->pad = RSA_PKCS1_PADDING;
+	// @caiiiycuk: TODO this code is not compatible with modern SSL
+	// rsa->pad = RSA_PKCS1_PADDING;
 #ifdef WIN32
 	r = RSA_verify(NID_sha1, (const unsigned char*)hash, 20, (const unsigned char*)sign, signlen, rsa);
 #else

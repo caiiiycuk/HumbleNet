@@ -161,7 +161,11 @@ int websocket_protocol(  struct lws *wsi
 						ERR_clear_error();
 						break;
 					} else {
+#ifndef OPENSSL_IS_BORINGSSL
+						ERR_put_error(ERR_LIB_X509, 0, ERR_R_PEM_LIB, NULL, 0);
+#else
 						OPENSSL_PUT_ERROR(X509, ERR_R_PEM_LIB);
+#endif
 						break;
 					}
 				}

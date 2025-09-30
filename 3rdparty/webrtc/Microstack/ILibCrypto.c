@@ -581,10 +581,6 @@ int __fastcall util_mkCert(struct util_cert *rootcert, struct util_cert* cert, i
 	char nameStr[(UTIL_HASHSIZE * 2) + 2];
 	BIGNUM *oBigNbr;
 
-#ifndef OPENSSL_IS_BORINGSSL
-	CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
-#endif
-
 	if (initialcert != NULL)
 	{
 		pk = X509_get_pubkey(initialcert->x509);
