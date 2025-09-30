@@ -1,4 +1,4 @@
-name: humblenet-linux
+name: humblenet-openssl-linux
 
 on:
   push:
