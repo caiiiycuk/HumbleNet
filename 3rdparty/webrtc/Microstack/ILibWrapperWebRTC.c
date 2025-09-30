@@ -1214,6 +1214,10 @@ char* ILibWrapper_WebRTC_Connection_AddServerReflexiveCandidateToLocalSDP(ILibWr
 	char *username;
 	char *password;
 	char address[255];
+
+	if (obj->offerBlock == NULL) {
+		return NULL;
+	}
 	
 	if(candidate!=NULL)
 	{

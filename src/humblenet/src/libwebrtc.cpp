@@ -91,7 +91,7 @@ void WebRTCOnIceCandidate(ILibWrapper_WebRTC_Connection webRTCConnection, struct
 	ILibWrapper_WebRTC_Connection_GetUserData(webRTCConnection, (void**)&ctx, NULL, &user_data);
 	
 	// no additional candidates found.
-	if( candidate == NULL )
+	if( candidate == NULL || ctx == NULL )
 		return;
 	
 	char* offer = ILibWrapper_WebRTC_Connection_AddServerReflexiveCandidateToLocalSDP( webRTCConnection, candidate );
