@@ -7,6 +7,7 @@
 
 #include "humblenet.h"
 #include "humblenet_p2p.h"
+#include "humblenet_p2p_internal.h"
 
 extern "C" bool EMSCRIPTEN_KEEPALIVE connectTo(const char* server, const char* token, const char* secret) {
     if (!humblenet_init()) {
@@ -72,4 +73,10 @@ extern "C" int EMSCRIPTEN_KEEPALIVE recvfrom(void* buffer, uint32_t length, Peer
 
 extern "C" void EMSCRIPTEN_KEEPALIVE disconnect(PeerId peer) {
     humblenet_p2p_disconnect(peer);
+}
+
+extern "C" void EMSCRIPTEN_KEEPALIVE shutdown() {
+    humblenet_p2p_shutdown();
+    humblenet_shutdown();
+    emscripten_force_exit(0);
 }
