@@ -341,10 +341,9 @@ namespace humblenet {
 				if (!query.empty() && query[0] == '=') {
 					auto cmp = query.substr(1, query.length()-1);
 					std::vector<std::pair<std::string, PeerId>> matched;
-					for (const auto& it: catalog->aliases) {
-						if (it.first == cmp) {
-							matched.emplace_back(it.first, it.second);
-						}
+					const auto& it = catalog->aliases.find(cmp);
+					if (it != catalog->aliases.end()) {
+						matched.emplace_back(it->first, it->second);
 					}
 
 					LOG_INFO("Query for alias '%s' for peer %u resolved to %d peers\n", query.c_str(), peerId,
