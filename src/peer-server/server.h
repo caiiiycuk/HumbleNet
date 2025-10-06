@@ -17,14 +17,8 @@ namespace humblenet {
 		// we need to be able to lookup connections on both
 		// websocket (for the receive callback) and peer id (when sending stuff)
 		std::unordered_map<struct lws *, std::unique_ptr<P2PSignalConnection> > signalConnections;
-
 		std::unique_ptr<Catalog> catalog;
-
-		std::string stunServerAddress;
-		std::string turnServer;
-		std::string turnUsername;
-		std::string turnPassword;
-
+		std::vector<ICEServer> iceServers;
 
 		Server();
 

@@ -8,3 +8,7 @@
 .idea
 /emscripten
 /bin/*
+
+ice-servers.txt
+*.log
+*.pidfile

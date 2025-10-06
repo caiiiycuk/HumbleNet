@@ -326,9 +326,7 @@ void sighandler(int sig)
 int main(int argc, char *argv[]) {
 	char* email = nullptr;
 	char* common_name = nullptr;
-	char* turn_server = nullptr;
-	char* turn_username = nullptr;
-	char* turn_password = nullptr;
+	std::vector<ICEServer> ice_servers;
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		std::string arg  = argv[i];
@@ -351,28 +349,54 @@ int main(int argc, char *argv[]) {
 				help(argv[0], "--common_name option requires an argument");
 				exit(2);
 			}
-		} else if (arg == "--TURN-server") {
+		} else if (arg == "--ice-servers") {
 			++i;
 			if (i < argc) {
-				turn_server = argv[i];
+				std::ifstream ice_servers_stream(argv[i]);
+
+				if (!ice_servers_stream.is_open()) {
+					printf("file '%s' does not exists\n", argv[i]);
+					abort();
+				}
+
+				std::string line;
+				while (std::getline(ice_servers_stream, line)) {
+					if (line.empty() || line[0] == '#') {
+						continue;
+					}
+
+					std::string url, username, password = "";
+					size_t space_pos = line.find(' ');
+
+					if (space_pos == std::string::npos) {
+						url = line;
+					} else {
+						url = line.substr(0, space_pos);
+						std::string creds = line.substr(space_pos + 1);
+						size_t colon_pos = creds.find(' ');
+						if (colon_pos == std::string::npos) {
+							printf("no password specified in line '%s'\n", line.c_str());
+							abort();
+						} else {
+							username = creds.substr(0, colon_pos);
+							password = creds.substr(colon_pos + 1);
+						}
+					}
+
+
+					if (url.find("stun") == 0) {
+						if (!username.empty() || !password.empty()) {
+							printf("Does not support for stun server with credentials\n");
+							abort();
+						}
+						ice_servers.push_back(ICEServer(url));
+					} else {
+						ice_servers.push_back(ICEServer(url, username, password));
+					}
+				}
+				ice_servers_stream.close();
 			} else {
-				help(argv[0], "--TURN-server option requires an argument");
-				exit(2);
-			}
-		} else if (arg == "--TURN-username") {
-			++i;
-			if (i < argc) {
-				turn_username = argv[i];
-			} else {
-				help(argv[0], "--TURN-username option requires an argument");
-				exit(2);
-			}
-		} else if (arg == "--TURN-password") {
-			++i;
-			if (i < argc) {
-				turn_password = argv[i];
-			} else {
-				help(argv[0], "--TURN-password option requires an argument");
+				help(argv[0], "--ice-servers option requires an argument");
 				exit(2);
 			}
 		}
@@ -380,14 +404,6 @@ int main(int argc, char *argv[]) {
 
 	if (email == nullptr || common_name == nullptr) {
 		help(argv[0], "--email and --common-name are required if you want to run with TLS\n");
-	}
-
-	if (turn_server != nullptr || turn_username != nullptr || turn_password != nullptr) {
-		if (turn_server == nullptr || turn_username == nullptr || turn_password == nullptr) {
-			help(argv[0], "--TURN-server, --TURN-username, and --TURN-password must all be specified together\n");
-			exit(2);
-		}
-	
 	}
 
 	logFileOpen("peer-server.log");
@@ -403,12 +419,7 @@ int main(int argc, char *argv[]) {
 	signal(SIGTERM, sighandler);
 
 	peerServer.reset(new Server());
-	// peerServer->stunServerAddress = "stun.cloudflare.com:3478";
-	if (turn_server) {
-		peerServer->turnServer = turn_server;
-		peerServer->turnUsername = turn_username;
-		peerServer->turnPassword = turn_password;
-	}
+	peerServer->iceServers = ice_servers;
 
 	struct lws_context_creation_info info;
 	memset(&info, 0, sizeof(info));

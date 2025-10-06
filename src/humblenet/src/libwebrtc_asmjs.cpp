@@ -238,9 +238,8 @@ void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** ser
 
 	for( int i = 0; i < count; ++i ) {
 		EM_ASM_INT({
-			var server = {};
-			server.urls = "stun:" + UTF8ToString($0);
-			Module.__libwebrtc.options.iceServers.push( server );
+			const url = UTF8ToString($0);
+			Module.__libwebrtc.options.iceServers.push({ urls: url.startsWith("stun:") ? url : "stun:" + url });
 		}, *servers);
 		servers++;
 	}
@@ -249,11 +248,32 @@ void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** ser
 void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password) {
 	EM_ASM({
 		Module.__libwebrtc.options.iceServers = Module.__libwebrtc.options.iceServers || [];
-		Module.__libwebrtc.options.iceServers.push({
-			urls: "turn:" + UTF8ToString($0),
-			username: UTF8ToString($1),
-			credential: UTF8ToString($2)
-		});
+
+		const server = {};
+		const url = UTF8ToString($0);
+		const username = UTF8ToString($1);
+		const password = UTF8ToString($2);
+		if (username.length > 0 && password.length > 0) {
+			server.username = username;
+			server.credential = password;
+		}
+
+		if (url.startsWith("turn:") || url.startsWith("turns:")) {
+			server.urls = url;
+			Module.__libwebrtc.options.iceServers.push(server);
+		} else if (url.endsWith("5349")) {
+			server.urls = "turns:" + url;
+			Module.__libwebrtc.options.iceServers.push(server);
+		} else {
+			Module.__libwebrtc.options.iceServers.push({
+				urls: "turn:" + url + "?transport=udp",
+				...server
+			});
+			Module.__libwebrtc.options.iceServers.push({
+				urls: "turn:" + url + "?transport=tcp",
+				...server
+			});
+		}
 	}, server, username, password);
 }
 
