@@ -19,21 +19,20 @@ db::DB::DB(): sql(nullptr) {
         abort();
     }
     
-    sqlite3_exec(sql, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
-    sqlite3_exec(sql, 
+    sqlite3_exec(sql,
         "CREATE TABLE IF NOT EXISTS live ("
             "alias TEXT PRIMARY KEY, "
             "peerid TEXT"
         ");"
         "CREATE INDEX IF NOT EXISTS live_alias_prefix ON live(alias);"
         
-        "CREATE TABLE IF NOT EXISTS history ("
-            "alias TEXT PRIMARY KEY, "
-            "\"startedAt\" INTEGER, "
-            "\"endedAt\" INTEGER"
+        "CREATE TABLE IF NOT EXISTS playtime ("
+            "prefix TEXT PRIMARY KEY, "
+            "total INTEGER"
         ");"
-        "CREATE INDEX IF NOT EXISTS history_alias_prefix ON history(alias);",
+        "CREATE INDEX IF NOT EXISTS playtime_prefix ON playtime(prefix);",
         nullptr, nullptr, nullptr);
+    sqlite3_exec(sql, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
 
     if (sqlite3_prepare_v2(sql, "INSERT OR REPLACE INTO live (alias, peerid) VALUES (?, ?);", -1, &insertLiveStmt, nullptr) != SQLITE_OK) {
         std::cerr << "Failed to prepare insert live statement: " << sqlite3_errmsg(sql) << std::endl;
@@ -43,12 +42,8 @@ db::DB::DB(): sql(nullptr) {
         std::cerr << "Failed to prepare remove live statement: " << sqlite3_errmsg(sql) << std::endl;
         abort();
     }
-    if (sqlite3_prepare_v2(sql, "INSERT OR REPLACE INTO history (alias, \"startedAt\", \"endedAt\") VALUES (?, ?, ?);", -1, &insertHistoryStmt, nullptr) != SQLITE_OK) {
-        std::cerr << "Failed to prepare insert history statement: " << sqlite3_errmsg(sql) << std::endl;
-        abort();
-    }
-    if (sqlite3_prepare_v2(sql, "UPDATE history SET endedAt = ? WHERE alias = ?;", -1, &updateHistoryStmt, nullptr) != SQLITE_OK) {
-        std::cerr << "Failed to prepare update history statement: " << sqlite3_errmsg(sql) << std::endl;
+    if (sqlite3_prepare_v2(sql, "INSERT INTO playtime (prefix, total) VALUES (?, ?) ON CONFLICT(prefix) DO UPDATE SET total = total + ?;", -1, &updatePlaytimeStmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare insert playtime statement: " << sqlite3_errmsg(sql) << std::endl;
         abort();
     }
 }
@@ -61,35 +56,47 @@ void db::DB::aliasAdded(const char* alias, PeerId peerId) {
     }
     sqlite3_reset(insertLiveStmt);
 
-    sqlite3_bind_text(insertHistoryStmt, 1, alias, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(insertHistoryStmt, 2, getNowMs());
-    sqlite3_bind_int64(insertHistoryStmt, 3, getNowMs());
-    if (sqlite3_step(insertHistoryStmt) != SQLITE_DONE) {
-        std::cerr << "Failed to execute insert: " << sqlite3_errmsg(sql) << std::endl;
-    }
-    sqlite3_reset(insertHistoryStmt);
+    std::string aliasKey = std::string(alias) + "-" + std::to_string(peerId);
+    aliasAddedAt[aliasKey] = getNowMs();
 }
 
-void db::DB::aliasRemoved(const char* alias) {
+void db::DB::aliasRemoved(const char* alias, PeerId peerId) {
     sqlite3_bind_text(removeLiveStmt, 1, alias, -1, SQLITE_STATIC);
     if (sqlite3_step(removeLiveStmt) != SQLITE_DONE) {
         std::cerr << "Failed to execute remove: " << sqlite3_errmsg(sql) << std::endl;
     }
     sqlite3_reset(removeLiveStmt);
 
-    sqlite3_bind_int64(updateHistoryStmt, 1, getNowMs());
-    sqlite3_bind_text(updateHistoryStmt, 2, alias, -1, SQLITE_STATIC);
-    if (sqlite3_step(updateHistoryStmt) != SQLITE_DONE) {
-        std::cerr << "Failed to execute update: " << sqlite3_errmsg(sql) << std::endl;
+    std::string aliasKey = std::string(alias) + "-" + std::to_string(peerId);
+    auto it = aliasAddedAt.find(aliasKey);
+    if (it != aliasAddedAt.end()) {
+        std::string prefix = alias;
+        auto firstDot = prefix.find('.');
+        if (firstDot != std::string::npos) {
+            auto secondDot = prefix.find('.', firstDot + 1);
+            if (secondDot != std::string::npos) {
+                prefix = prefix.substr(0, secondDot);
+                auto now = getNowMs();
+                if (now > it->second) {
+                    auto addTime = getNowMs() - it->second;
+                    sqlite3_bind_text(updatePlaytimeStmt, 1, prefix.c_str(), -1, SQLITE_STATIC);
+                    sqlite3_bind_int64(updatePlaytimeStmt, 2, addTime);
+                    sqlite3_bind_int64(updatePlaytimeStmt, 3, addTime);
+                    if (sqlite3_step(updatePlaytimeStmt) != SQLITE_DONE) {
+                        std::cerr << "Failed to execute update: " << sqlite3_errmsg(sql) << std::endl;
+                    }
+                    sqlite3_reset(updatePlaytimeStmt);
+                }
+            }
+        }
+        aliasAddedAt.erase(it);
     }
-    sqlite3_reset(updateHistoryStmt);
 }
 
 db::DB::~DB() {
     sqlite3_finalize(insertLiveStmt);
     sqlite3_finalize(removeLiveStmt);
-    sqlite3_finalize(insertHistoryStmt);
-    sqlite3_finalize(updateHistoryStmt);
+    sqlite3_finalize(updatePlaytimeStmt);
     sqlite3_close(sql);
     sql = nullptr;
 }

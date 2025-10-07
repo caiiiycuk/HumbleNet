@@ -284,7 +284,7 @@ namespace humblenet {
 					auto existing = catalog->aliases.find( alias->c_str() );
 
 					if( existing != catalog->aliases.end() && existing->second == peerId ) {
-						db::get()->aliasRemoved(alias->c_str());
+						db::get()->aliasRemoved(alias->c_str(), existing->second);
 						catalog->aliases.erase( existing );
 
 						LOG_INFO("Unregistring alias '%s' for peer %u\n", alias->c_str(), peerId );
@@ -296,7 +296,7 @@ namespace humblenet {
 				} else {
 					for( auto it = catalog->aliases.begin(); it != catalog->aliases.end(); ) {
 						if( it->second == peerId ) {
-							db::get()->aliasRemoved(it->first.c_str());
+							db::get()->aliasRemoved(it->first.c_str(), it->second);
 							catalog->aliases.erase( it++ );
 						} else {
 							++it;

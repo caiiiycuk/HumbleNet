@@ -9,7 +9,7 @@ namespace humblenet {
 	{
 		for( auto it = aliases.begin(); it != aliases.end(); ) {
 			if( it->second == p ) {
-				db::get()->aliasRemoved(it->first.c_str());
+				db::get()->aliasRemoved(it->first.c_str(), it->second);
 				aliases.erase( it++ );
 			} else {
 				++it;
