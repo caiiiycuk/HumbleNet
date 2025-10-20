@@ -464,11 +464,11 @@ int main(int argc, char *argv[]) {
 	info.pvo = &pvo;
 	info.protocols = protocols_8080;
 
-	struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
-	if (host_8080 == NULL) {
-		LOG_ERROR("Failed to create vhost for port 8080\n");
-		exit(1);
-	}
+	// struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
+	// if (host_8080 == NULL) {
+	// 	LOG_ERROR("Failed to create vhost for port 8080\n");
+	// 	exit(1);
+	// }
 
 	if (email == nullptr || common_name == nullptr) {
 		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
