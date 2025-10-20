@@ -288,8 +288,6 @@ int callback_humblepeer(struct lws *wsi
 	return 0;
 }
 
-extern "C" struct lws_protocols acme_plugin_protocol;
-
 struct lws_protocols protocols_8080[] = {
 	  { "humblepeer", callback_humblepeer, 1 }
 	, { NULL, NULL, 0 }
@@ -297,8 +295,6 @@ struct lws_protocols protocols_8080[] = {
 
 struct lws_protocols protocols_444[] = {
 	  { "humblepeer", callback_humblepeer, 1 }
-	, acme_plugin_protocol
-
 	, { NULL, NULL, 0 }
 };
 
@@ -443,32 +439,12 @@ int main(int argc, char *argv[]) {
 
 	info.port = 8080;
 	info.vhost_name = "HTTP_8080_vhost";
-	struct lws_protocol_vhost_options pvo6 = {
-		NULL, NULL, "email", email
-	}, pvo5 = {
-		&pvo6, NULL, "common-name", common_name
-	}, pvo4 = {
-		&pvo5, NULL, "directory-url", "https://acme-v02.api.letsencrypt.org/directory" //"https://acme-staging-v02.api.letsencrypt.org/directory"
-	}, pvo3 = {
-		&pvo4, NULL, "auth-path", "./auth.jwk"
-	}, pvo2 = {
-		&pvo3, NULL, "cert-path", "./peer-server.key.crt"
-	}, pvo1 = {
-		&pvo2, NULL, "key-path", "./peer-server.key.pem" /* would be an absolute path */
-	}, pvo = {
-		NULL,                  /* "next" pvo linked-list */
-		&pvo1,                 /* "child" pvo linked-list */
-		"lws-acme-client",        /* protocol name we belong to on this vhost */
-		""                     /* ignored */
-	};
-	info.pvo = &pvo;
 	info.protocols = protocols_8080;
-
-	// struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
-	// if (host_8080 == NULL) {
-	// 	LOG_ERROR("Failed to create vhost for port 8080\n");
-	// 	exit(1);
-	// }
+	struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
+	if (host_8080 == NULL) {
+		LOG_ERROR("Failed to create vhost for port 8080\n");
+		exit(1);
+	}
 
 	if (email == nullptr || common_name == nullptr) {
 		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
@@ -476,8 +452,8 @@ int main(int argc, char *argv[]) {
 		info.protocols = protocols_444;
 		info.port = 444;
 		info.vhost_name = "SSL_vhost";
-		info.ssl_cert_filepath = "./peer-server.key.crt";
-		info.ssl_private_key_filepath = "./peer-server.key.pem";
+		info.ssl_cert_filepath = "/etc/letsencrypt/live/net.js-dos.com/fullchain.pem";
+		info.ssl_private_key_filepath = "/etc/letsencrypt/live/net.js-dos.com/privkey.pem";
 		info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
 		struct lws_vhost *host_444 = lws_create_vhost(peerServer->context, &info);
 		if (host_444 == NULL) {
