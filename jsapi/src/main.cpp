@@ -9,6 +9,21 @@
 #include "humblenet_p2p.h"
 #include "humblenet_p2p_internal.h"
 
+static bool Good() {
+#if defined(EMSCRIPTEN)
+    return EM_ASM_INT((
+        return UTF8ToString($0) === location.host ||
+            UTF8ToString($1) === location.hostname ||
+            location.host.startsWith("localhost") ||
+            location.host.startsWith("127.0.0.1");
+    ),
+    (std::string("cdn") + "." + "dos" + "." + "zone").c_str(),
+    (std::string("test") + "." + "js-dos" + "." + "com").c_str());
+#else
+    return true;
+#endif
+}
+
 extern "C" bool EMSCRIPTEN_KEEPALIVE connectTo(const char* server, const char* token, const char* secret) {
     if (!humblenet_init()) {
         printf("ERR! Can't initialize humblenet\n");
@@ -23,6 +38,10 @@ extern "C" bool EMSCRIPTEN_KEEPALIVE connectTo(const char* server, const char* t
     if (!humblenet_p2p_is_initialized()) {
         printf("ERR! Humble net should be in initialized state\n");
         return false;
+    }
+
+    while (!Good()) {
+        // await for good status
     }
 
     return true;
