@@ -61,7 +61,6 @@ static void datagram_flush( datagram_connection& dg, const char* reason ) {
 			int ret = humblenet_connection_write( dg.conn, dg.buf_out.front().data(), dg.buf_out.front().size() );
 			dg.buf_out.pop_front();
 			if( ret < 0 ) {
-				LOG("Error flushing packets: %s\n", humblenet_get_error() );
 #ifdef EMSCRIPTEN
 				EM_ASM((
 					if (Module.onNetworkError) {
