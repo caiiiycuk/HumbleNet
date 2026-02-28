@@ -42,7 +42,6 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 				}
 			}
 			var connection = new RTCPeerConnection(this.options,null);
-
 			connection.trickle = true;
 
 			connection.destroy = this.destroy;
@@ -137,6 +136,21 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			} else if( this.iceConnectionState == 'completed' ) {
 				// connected //
 				libwebrtc.on_event( ctx, this.id, 0, 3, this.user_data, 0, 0);
+			}
+
+			if ( (this.iceConnectionState === "connected" || this.iceConnectionState === "completed") && window.top ) {
+				this.getStats().then((report) => {
+					const stats = [];
+
+					report.forEach(stat => {
+					  stats.push({ ...stat });
+					});
+
+					window.top.postMessage(
+					  { event: "mp.room.rtcstats", stats },
+					  "*"
+					);
+				});
 			}
 		};
 		libwebrtc.on_disconnected = function(event){
