@@ -33,6 +33,14 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 		libwebrtc.options = {};
 
 		libwebrtc.create = function() {
+			if (window.netConfig) {
+				if (window.netConfig.iceServers) {
+					this.options.iceServers = window.netConfig.iceServers;
+				}
+				if (window.netConfig.debug) {
+					console.log("[DEBUG] RTCPeerConnection created", JSON.stringify(this.options, null, 2));
+				}
+			}
 			var connection = new RTCPeerConnection(this.options,null);
 
 			connection.trickle = true;
@@ -52,7 +60,9 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 		};
 		libwebrtc.create_channel = function(connection, name) {
 			var ordered = window.netConfig ? window.netConfig.ordered == true : false;
-			console.log("created channel", name, "ordered", ordered);
+			if (window.netConfig && window.netConfig.debug) {
+				console.log("[DEBUG] created channel", name, "ordered", ordered);
+			}
 			var channel = connection.createDataChannel( name, { ordered: ordered, maxRetransmits: ordered ? null : 0 } );
 			channel.parent = connection;
 			// use the parents data initially

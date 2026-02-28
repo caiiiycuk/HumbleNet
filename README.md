@@ -68,3 +68,33 @@ Compilation:
 
 Follow steps from [action file](https://github.com/caiiiycuk/HumbleNet/blob/master/.github/workflows/humblenet-linux.yml)
 
+Confiugring
+===========
+
+peer-server can read configuration file with ` --ice-servers` flag, the format of config is following:
+
+```text
+stun:<address>
+turn:<address> [user] [password]
+turns:<address> [user] [password]
+```
+
+For example:
+
+```text
+stun:stun.l.google.com:19302
+stun:global.expressturn.com:3478
+turn:global.expressturn.com:3478 user pass
+turns:relay1.expressturn.com:443?transport=tcp user pass
+```
+
+Additionaly you can configure iceServes via js:
+```js
+window.netConfig = {
+   debug: boolean, // verbose output
+   ordered: boolean, 
+   iceServers: //...,
+}
+```
+
+
