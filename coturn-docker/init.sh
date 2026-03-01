@@ -106,50 +106,20 @@ docker compose build
 echo ""
 echo "Step 2: Generating Let's Encrypt certificate..."
 
-if [ "$ACME_PORT" = "80" ]; then
-    echo "  Using certbot standalone (port 80 must be reachable from the internet)"
-    echo ""
+echo "  Using certbot standalone (port $ACME_PORT must be reachable from the internet)"
+echo ""
 
-    docker compose run --rm --entrypoint "" \
-        -p 80:80 \
-        certbot \
-        certbot certonly \
-            --standalone \
-            --preferred-challenges http \
-            --email "$EMAIL" \
-            --agree-tos \
-            --no-eff-email \
-            $STAGING \
-            -d "$DOMAIN"
-else
-    echo "  ACME_PORT=$ACME_PORT — using webroot mode"
-    echo "  Your host nginx must proxy /.well-known/acme-challenge/ to localhost:$ACME_PORT"
-    echo ""
-    echo "  Example host nginx config:"
-    echo "    location /.well-known/acme-challenge/ {"
-    echo "        proxy_pass http://127.0.0.1:$ACME_PORT;"
-    echo "    }"
-    echo ""
-
-    echo "  Starting nginx for ACME challenge..."
-    docker compose up -d nginx
-
-    sleep 3
-
-    docker compose run --rm --entrypoint "" \
-        certbot \
-        certbot certonly \
-            --webroot \
-            -w /var/www/certbot \
-            --preferred-challenges http \
-            --email "$EMAIL" \
-            --agree-tos \
-            --no-eff-email \
-            $STAGING \
-            -d "$DOMAIN"
-
-    docker compose stop nginx
-fi
+docker compose run --rm --entrypoint "" \
+    -p $ACME_PORT:80 \
+    certbot \
+    certbot certonly \
+        --standalone \
+        --preferred-challenges http \
+        --email "$EMAIL" \
+        --agree-tos \
+        --no-eff-email \
+        $STAGING \
+        -d "$DOMAIN"
 
 # ── Start ─────────────────────────────────────────────────────────
 

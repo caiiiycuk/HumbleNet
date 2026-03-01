@@ -36,6 +36,7 @@ services:
     logging: *default-logging
     network_mode: host
     volumes:
+      - coturn-data:/var/lib/coturn
       - certbot-certs:/etc/letsencrypt:ro
       - ./turnserver.conf.template:/etc/turnserver.conf.template:ro
     env_file:
@@ -58,5 +59,6 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --deploy-hook \"touch /etc/letsencrypt/renewed\"; sleep 12h & wait $${!}; done'"
 
 volumes:
+  coturn-data:
   certbot-webroot:
   certbot-certs:

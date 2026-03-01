@@ -216,6 +216,31 @@ All settings are in the `.env` file:
 | `RELAY_PORT_MIN` | Start of UDP relay port range | `49152` |
 | `RELAY_PORT_MAX` | End of UDP relay port range | `49252` |
 | `PUBLIC_IP` | VPS public IP (auto-detected if empty) | *(auto)* |
+| `PUBLISH_URL` | URL to POST iceServers + traffic JSON to (empty = disabled) | *(empty)* |
+| `PUBLISH_INTERVAL` | Seconds between iceServers publications | `60` |
+
+### Published JSON format
+
+When `PUBLISH_URL` is set, the entrypoint POSTs the following JSON every `PUBLISH_INTERVAL` seconds:
+
+```json
+{
+  "iceServers": [
+    { "urls": ["stun:turn.example.com:3478"] },
+    {
+      "urls": ["turn:turn.example.com:3478", "turns:turn.example.com:5349"],
+      "username": "1740000000",
+      "credential": "base64-hmac..."
+    }
+  ],
+  "traffic": {
+    "dailyBytes": 123456789,
+    "monthlyBytes": 9876543210
+  }
+}
+```
+
+The `traffic` object reports total bytes relayed by coturn (received + sent), tracked via coturn's built-in prometheus metrics. Counters reset at midnight (daily) and on the 1st of each month. Stats persist across container restarts via the `coturn-data` volume.
 
 ### Proxying ACME through host nginx
 
