@@ -1,0 +1,55 @@
+limit_req_zone $binary_remote_addr zone=ping:1m rate=10r/s;
+
+# Port 80 — ACME challenges only (required by Let's Encrypt)
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 444;
+    }
+}
+
+# Port 8000 — HTTPS ping API + test page
+server {
+    listen 8000 ssl http2;
+    server_name ${DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+
+    location /ping {
+        limit_req zone=ping burst=20 nodelay;
+
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'Content-Type' always;
+        add_header 'Cache-Control' 'no-store, no-cache, must-revalidate' always;
+
+        if ($request_method = 'OPTIONS') {
+            return 204;
+        }
+
+        return 200 '{"ts":$msec}';
+        default_type application/json;
+    }
+
+    location / {
+        root /usr/share/nginx/html;
+        index ping.html;
+    }
+}

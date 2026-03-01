@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TURN Server Latency Test</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f172a; color: #e2e8f0;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: #1e293b; border-radius: 16px; padding: 40px;
+    max-width: 560px; width: 90%; box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; color: #f8fafc; }
+  .subtitle { color: #94a3b8; margin-bottom: 32px; font-size: 0.9rem; }
+  .test-section { margin-bottom: 24px; }
+  .test-label {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #64748b; margin-bottom: 8px;
+  }
+  .result-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #0f172a; border-radius: 8px; padding: 12px 16px; margin-bottom: 6px;
+  }
+  .result-name { font-size: 0.9rem; }
+  .result-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .result-value.good { color: #4ade80; }
+  .result-value.ok { color: #facc15; }
+  .result-value.bad { color: #f87171; }
+  .result-value.pending { color: #64748b; }
+  .bar {
+    height: 4px; border-radius: 2px; margin-top: 4px;
+    background: #334155; overflow: hidden;
+  }
+  .bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  button {
+    width: 100%; padding: 14px; border: none; border-radius: 10px;
+    background: #3b82f6; color: #fff; font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: background 0.2s;
+  }
+  button:hover { background: #2563eb; }
+  button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+  .log {
+    margin-top: 24px; background: #0f172a; border-radius: 8px;
+    padding: 12px; font-family: monospace; font-size: 0.8rem;
+    max-height: 180px; overflow-y: auto; color: #94a3b8; line-height: 1.6;
+  }
+  .config {
+    margin-bottom: 24px; display: grid; grid-template-columns: 1fr; gap: 8px;
+  }
+  .config label { font-size: 0.75rem; color: #94a3b8; display: block; margin-bottom: 2px; }
+  .config input {
+    width: 100%; background: #0f172a; border: 1px solid #334155;
+    border-radius: 6px; padding: 8px 10px; color: #e2e8f0; font-size: 0.85rem;
+  }
+  .config input:focus { outline: none; border-color: #3b82f6; }
+  .hint { font-size: 0.7rem; color: #475569; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>TURN Server Latency Test</h1>
+  <p class="subtitle">Enter your server domain and TURN secret to test connectivity</p>
+
+  <div class="config">
+    <div>
+      <label>Server Domain</label>
+      <input type="text" id="cfg-domain" placeholder="turn.example.com">
+    </div>
+    <div>
+      <label>TURN Secret</label>
+      <input type="password" id="cfg-secret" placeholder="your TURN_SECRET from .env">
+      <div class="hint">Ephemeral credentials are generated locally using HMAC-SHA1. The secret never leaves your browser.</div>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-label">HTTP Ping (HTTPS)</div>
+    <div class="result-row">
+      <span class="result-name">Round-trip</span>
+      <span class="result-value pending" id="http-rtt">--</span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="http-bar" style="width:0; background:#3b82f6"></div></div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-label">STUN Binding (UDP)</div>
+    <div class="result-row">
+      <span class="result-name">Round-trip</span>
+      <span class="result-value pending" id="stun-rtt">--</span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="stun-bar" style="width:0; background:#8b5cf6"></div></div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-label">TURN Relay Allocation</div>
+    <div class="result-row">
+      <span class="result-name">Allocation time</span>
+      <span class="result-value pending" id="turn-rtt">--</span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="turn-bar" style="width:0; background:#06b6d4"></div></div>
+  </div>
+
+  <button id="run-btn" onclick="runTests()">Run Latency Test</button>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+$('cfg-domain').value = location.hostname !== 'localhost' ? location.hostname : '';
+
+function log(msg) {
+  const el = $('log');
+  const t = new Date().toLocaleTimeString();
+  el.innerHTML += `<div>[${t}] ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setResult(id, ms) {
+  const el = $(id + '-rtt');
+  const bar = $(id + '-bar');
+  const val = Math.round(ms);
+  el.textContent = val + ' ms';
+  el.className = 'result-value ' + (val < 50 ? 'good' : val < 150 ? 'ok' : 'bad');
+  bar.style.width = Math.min(100, val / 3) + '%';
+  bar.style.background = val < 50 ? '#4ade80' : val < 150 ? '#facc15' : '#f87171';
+}
+
+async function generateTurnCredentials(secret, ttlSeconds) {
+  ttlSeconds = ttlSeconds || 86400;
+  const timestamp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const username = timestamp.toString();
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const msgData = encoder.encode(username);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyData, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+  const credential = btoa(String.fromCharCode(...new Uint8Array(signature)));
+
+  return { username, credential };
+}
+
+async function pingHTTP(domain) {
+  const url = `https://${domain}:8000/ping`;
+  log('HTTP ping: ' + url);
+
+  try { await fetch(url, { mode: 'cors', cache: 'no-store' }); } catch(e) {}
+
+  const samples = [];
+  for (let i = 0; i < 5; i++) {
+    const t0 = performance.now();
+    try {
+      await fetch(url, { mode: 'cors', cache: 'no-store' });
+      samples.push(performance.now() - t0);
+    } catch (e) {
+      log('HTTP ping failed: ' + e.message);
+      return null;
+    }
+  }
+  samples.sort((a, b) => a - b);
+  const median = samples[Math.floor(samples.length / 2)];
+  log(`HTTP ping: ${samples.map(s => Math.round(s) + 'ms').join(', ')} (median: ${Math.round(median)}ms)`);
+  return median;
+}
+
+async function pingSTUN(domain) {
+  log('STUN binding test: stun:' + domain + ':3478');
+  return new Promise((resolve) => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:' + domain + ':3478' }]
+    });
+    const t0 = performance.now();
+    let resolved = false;
+
+    pc.onicecandidate = (e) => {
+      if (resolved) return;
+      if (e.candidate && e.candidate.candidate.includes('srflx')) {
+        const rtt = performance.now() - t0;
+        resolved = true;
+        log('STUN binding response: ' + Math.round(rtt) + 'ms (server-reflexive candidate)');
+        pc.close();
+        resolve(rtt);
+      }
+    };
+
+    pc.createDataChannel('ping');
+    pc.createOffer().then(o => pc.setLocalDescription(o));
+
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        log('STUN binding: timeout (no srflx candidate in 5s)');
+        pc.close();
+        resolve(null);
+      }
+    }, 5000);
+  });
+}
+
+async function pingTURN(domain, username, credential) {
+  log('TURN allocation test with ephemeral credentials (user: ' + username + ')');
+  return new Promise((resolve) => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{
+        urls: [
+          'turn:' + domain + ':3478?transport=udp',
+          'turns:' + domain + ':5349?transport=tcp'
+        ],
+        username,
+        credential
+      }],
+      iceTransportPolicy: 'relay'
+    });
+    const t0 = performance.now();
+    let resolved = false;
+
+    pc.onicecandidate = (e) => {
+      if (resolved) return;
+      if (e.candidate && e.candidate.candidate.includes('relay')) {
+        const rtt = performance.now() - t0;
+        resolved = true;
+        log('TURN relay allocated: ' + Math.round(rtt) + 'ms');
+        pc.close();
+        resolve(rtt);
+      }
+    };
+
+    pc.createDataChannel('ping');
+    pc.createOffer().then(o => pc.setLocalDescription(o));
+
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        log('TURN allocation: timeout (no relay candidate in 10s — check secret)');
+        pc.close();
+        resolve(null);
+      }
+    }, 10000);
+  });
+}
+
+async function runTests() {
+  const domain = $('cfg-domain').value.trim();
+  const secret = $('cfg-secret').value.trim();
+
+  if (!domain) { alert('Please enter the server domain'); return; }
+
+  const btn = $('run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Testing...';
+  $('log').innerHTML = '';
+
+  ['http', 'stun', 'turn'].forEach(id => {
+    $(id + '-rtt').textContent = '...';
+    $(id + '-rtt').className = 'result-value pending';
+    $(id + '-bar').style.width = '0';
+  });
+
+  log('Starting latency tests for ' + domain);
+
+  const httpMs = await pingHTTP(domain);
+  if (httpMs !== null) setResult('http', httpMs);
+  else $('http-rtt').textContent = 'failed';
+
+  const stunMs = await pingSTUN(domain);
+  if (stunMs !== null) setResult('stun', stunMs);
+  else $('stun-rtt').textContent = 'failed';
+
+  if (secret) {
+    const creds = await generateTurnCredentials(secret);
+    log('Generated ephemeral credentials (expires in 24h)');
+    const turnMs = await pingTURN(domain, creds.username, creds.credential);
+    if (turnMs !== null) setResult('turn', turnMs);
+    else $('turn-rtt').textContent = 'failed';
+  } else {
+    log('Skipping TURN test (no secret provided)');
+    $('turn-rtt').textContent = 'skipped';
+  }
+
+  log('Tests complete');
+  btn.disabled = false;
+  btn.textContent = 'Run Latency Test';
+}
+</script>
+</body>
+</html>
