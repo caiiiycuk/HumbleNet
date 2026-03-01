@@ -105,13 +105,13 @@ publish_ice() {
     load_stats
     while true; do
         update_traffic
-        local ts=$(($(date +%s) + ttl))
+        local ts=$(($(date +%s) + ttl)):master
         local cred
         cred=$(printf '%s' "$ts" | openssl dgst -sha1 -hmac "$TURN_SECRET" -binary | base64)
         local code
         code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 -X POST \
             -H "Content-Type: application/json" \
-            -d "{\"domain\":\"${DOMAIN}\",\"turnSecret\":\"${TURN_SECRET}\",\"iceServers\":[{\"urls\":[\"stun:${DOMAIN}:3478\"]},{\"urls\":[\"turn:${DOMAIN}:3478\",\"turns:${DOMAIN}:5349\"],\"username\":\"${ts}\",\"credential\":\"${cred}\"}],\"traffic\":{\"dailyBytes\":${DAILY_BYTES},\"monthlyBytes\":${MONTHLY_BYTES}}}" \
+            -d "{\"domain\":\"${DOMAIN}\",\"turnSecret\":\"${TURN_SECRET}\",\"iceServers\":[{\"urls\":[\"stun:${DOMAIN}:3478\"]},{\"urls\":[\"turn:${DOMAIN}:3478?transport=udp\",\"turn:${DOMAIN}:3478?transport=tcp\",\"turns:${DOMAIN}:5349?transport=tcp\"],\"username\":\"${ts}\",\"credential\":\"${cred}\"}],\"traffic\":{\"dailyBytes\":${DAILY_BYTES},\"monthlyBytes\":${MONTHLY_BYTES}}}" \
             "$PUBLISH_URL" 2>&1) || true
         echo "ice-publisher: user=$ts daily=${DAILY_BYTES}B monthly=${MONTHLY_BYTES}B -> HTTP $code"
         sleep "${PUBLISH_INTERVAL:-60}"
