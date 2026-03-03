@@ -147,7 +147,7 @@ ufw allow 3478/tcp     # STUN/TURN
 ufw allow 3478/udp     # STUN/TURN
 ufw allow 5349/tcp     # TURNS
 ufw allow 8000/tcp     # HTTPS ping API + test page
-ufw allow 49152:49252/udp  # Media relay
+ufw allow 49152:65535/udp  # Media relay
 ```
 
 If you use Digital Ocean's cloud firewall, create equivalent inbound rules there as well.
