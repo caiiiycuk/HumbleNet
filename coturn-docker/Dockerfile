@@ -1,4 +1,4 @@
-FROM coturn/coturn:latest
+FROM coturn/coturn:4.9.0-r0
 
 USER root
 

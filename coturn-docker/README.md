@@ -458,6 +458,8 @@ To trigger a manual renewal:
 ./renew-certs.sh
 ```
 
+That script runs `certbot renew`, reloads nginx so it serves the new TLS certificates, then restarts the coturn container so it reloads certs as well (same outcome as the automatic certbot renewal hook).
+
 ## Changing configuration
 
 ### Rotate the TURN secret
