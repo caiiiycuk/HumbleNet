@@ -393,3 +393,19 @@ covering:
 - callback mapping
 - SDP/ICE handling
 - datachannel lifecycle
+
+## Current Implementation Status
+
+- `[x]` Linux provider submodule is added and pinned
+- `[x]` external provider configure/build/install flow works from the main project
+- `[x]` provider autodetection resolves installed `include` and `lib` paths from `dist/Release`
+- `[x]` new `webrtc_native_linux.cpp` builds into `libwebrtc.so`
+- `[x]` `humblenet_test_webrtc` now builds against the external backend path
+- `[~]` provider fork contains Linux build fixes for `depot_tools` pathing and clang-based generation
+- `[~]` provider fork now includes an upstream patch hook for the current WebRTC checkout compile break
+- `[ ]` runtime behavior is not stabilized yet
+
+Current runtime result:
+
+- `humblenet_test_webrtc.bin.x86_64` starts, exchanges SDP and ICE candidates, but ends with `call setup timed out`
+- this means the migration is past build/link integration and is now blocked on connection-establishment behavior

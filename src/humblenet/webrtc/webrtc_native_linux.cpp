@@ -36,9 +36,9 @@ struct libwebrtc_context {
 	std::string turn_username;
 	std::string turn_password;
 
-	std::unique_ptr<webrtc::Thread> network_thread;
-	std::unique_ptr<webrtc::Thread> worker_thread;
-	std::unique_ptr<webrtc::Thread> signaling_thread;
+	std::unique_ptr<rtc::Thread> network_thread;
+	std::unique_ptr<rtc::Thread> worker_thread;
+	std::unique_ptr<rtc::Thread> signaling_thread;
 
 	webrtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> factory;
 };
@@ -148,13 +148,13 @@ struct libwebrtc_connection : public webrtc::PeerConnectionObserver {
 
 	void OnIceGatheringChange(webrtc::PeerConnectionInterface::IceGatheringState) override {}
 
-	void OnIceCandidate(const webrtc::IceCandidate* candidate) override {
+	void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) override {
 		if(!ctx || !ctx->callback || !candidate) {
 			return;
 		}
 
-		std::string sdp = candidate->ToString();
-		if(sdp.empty()) {
+		std::string sdp;
+		if(!candidate->ToString(&sdp) || sdp.empty()) {
 			NotifyError("ice-candidate-to-string");
 			return;
 		}
@@ -162,7 +162,7 @@ struct libwebrtc_connection : public webrtc::PeerConnectionObserver {
 	}
 
 	void OnIceConnectionReceivingChange(bool) override {}
-	void OnIceCandidateRemoved(const webrtc::IceCandidate*) override {}
+	void OnIceCandidatesRemoved(const std::vector<cricket::Candidate>&) override {}
 	void OnAddTrack(webrtc::scoped_refptr<webrtc::RtpReceiverInterface>,
 	                const std::vector<webrtc::scoped_refptr<webrtc::MediaStreamInterface>>&) override {}
 	void OnRemoveTrack(webrtc::scoped_refptr<webrtc::RtpReceiverInterface>) override {}
@@ -285,8 +285,8 @@ public:
 			return;
 		}
 
-		std::string sdp = desc->ToString();
-		if(sdp.empty()) {
+		std::string sdp;
+		if(!desc->ToString(&sdp) || sdp.empty()) {
 			delete desc;
 			connection_->CloseFromError("local-description-to-string");
 			return;
@@ -295,7 +295,7 @@ public:
 		std::unique_ptr<webrtc::SessionDescriptionInterface> owned_desc(desc);
 		connection_->connection->SetLocalDescription(
 			std::move(owned_desc),
-			webrtc::make_ref_counted<SetLocalDescriptionObserver>(connection_));
+			rtc::make_ref_counted<SetLocalDescriptionObserver>(connection_));
 
 		connection_->ctx->callback(
 			connection_->ctx,
@@ -345,7 +345,7 @@ public:
 
 		if(action_ == Action::kSetOffer) {
 			connection_->connection->CreateAnswer(
-				webrtc::make_ref_counted<CreateDescriptionObserver>(connection_, webrtc::SdpType::kAnswer).get(),
+				rtc::make_ref_counted<CreateDescriptionObserver>(connection_, webrtc::SdpType::kAnswer).get(),
 				webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
 		}
 	}
@@ -385,13 +385,13 @@ struct libwebrtc_context* libwebrtc_create_context(lwrtc_callback_function callb
 		return nullptr;
 	}
 
-	webrtc::InitializeSSL();
+	rtc::InitializeSSL();
 
 	std::unique_ptr<libwebrtc_context> ctx(new libwebrtc_context());
 	ctx->callback = callback;
-	ctx->network_thread = webrtc::Thread::CreateWithSocketServer();
-	ctx->worker_thread = webrtc::Thread::Create();
-	ctx->signaling_thread = webrtc::Thread::Create();
+	ctx->network_thread = rtc::Thread::CreateWithSocketServer();
+	ctx->worker_thread = rtc::Thread::Create();
+	ctx->signaling_thread = rtc::Thread::Create();
 
 	if(!ctx->network_thread || !ctx->worker_thread || !ctx->signaling_thread) {
 		return nullptr;
@@ -539,7 +539,7 @@ int libwebrtc_create_offer(struct libwebrtc_connection* connection) {
 	}
 
 	connection->connection->CreateOffer(
-		webrtc::make_ref_counted<CreateDescriptionObserver>(connection, webrtc::SdpType::kOffer).get(),
+		rtc::make_ref_counted<CreateDescriptionObserver>(connection, webrtc::SdpType::kOffer).get(),
 		webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
 	return 1;
 }
@@ -559,7 +559,7 @@ int libwebrtc_set_offer(struct libwebrtc_connection* connection, const char* sdp
 
 	connection->connection->SetRemoteDescription(
 		std::move(description),
-		webrtc::make_ref_counted<SetRemoteDescriptionObserver>(connection, SetRemoteDescriptionObserver::Action::kSetOffer));
+		rtc::make_ref_counted<SetRemoteDescriptionObserver>(connection, SetRemoteDescriptionObserver::Action::kSetOffer));
 	return 1;
 }
 
@@ -578,7 +578,7 @@ int libwebrtc_set_answer(struct libwebrtc_connection* connection, const char* sd
 
 	connection->connection->SetRemoteDescription(
 		std::move(description),
-		webrtc::make_ref_counted<SetRemoteDescriptionObserver>(connection, SetRemoteDescriptionObserver::Action::kSetAnswer));
+		rtc::make_ref_counted<SetRemoteDescriptionObserver>(connection, SetRemoteDescriptionObserver::Action::kSetAnswer));
 	return 1;
 }
 
@@ -588,8 +588,8 @@ int libwebrtc_add_ice_candidate(struct libwebrtc_connection* connection, const c
 	}
 
 	webrtc::SdpParseError error;
-	std::unique_ptr<webrtc::IceCandidate> ice(
-		webrtc::IceCandidate::Create("data", 0, candidate, &error));
+	std::unique_ptr<webrtc::IceCandidateInterface> ice(
+		webrtc::CreateIceCandidate("data", 0, candidate, &error));
 	if(!ice) {
 		std::fprintf(stderr, "webrtc_native_linux: add-ice-candidate parse error at '%s': %s\n", error.line.c_str(), error.description.c_str());
 		return 0;
@@ -603,7 +603,7 @@ int libwebrtc_write(struct libwebrtc_data_channel* channel, const void* data, in
 		return -1;
 	}
 
-	webrtc::CopyOnWriteBuffer buffer(static_cast<const uint8_t*>(data), (size_t)len);
+	rtc::CopyOnWriteBuffer buffer(static_cast<const uint8_t*>(data), (size_t)len);
 	return channel->channel->Send(webrtc::DataBuffer(buffer, true)) ? len : -1;
 }
 

@@ -187,20 +187,30 @@ if(HUMBLENET_NATIVE)
 			message(FATAL_ERROR "HUMBLENET_EXTERNAL_WEBRTC is currently supported on Linux only")
 		endif()
 
+		set(_external_webrtc_provider_config_name "${CMAKE_BUILD_TYPE}")
+		if(NOT _external_webrtc_provider_config_name)
+			set(_external_webrtc_provider_config_name "Release")
+		endif()
+
 		set(_external_webrtc_provider_build_dir "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/build")
 		if(EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/CMakeLists.txt")
+			set(_external_webrtc_provider_build_config_args "")
+			if(CMAKE_CONFIGURATION_TYPES)
+				list(APPEND _external_webrtc_provider_build_config_args --config ${_external_webrtc_provider_config_name})
+			endif()
+
 			add_custom_target(humblenet_external_webrtc_provider_configure
 				COMMAND ${CMAKE_COMMAND}
 					-S "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}"
 					-B "${_external_webrtc_provider_build_dir}"
-					-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+					-DCMAKE_BUILD_TYPE=${_external_webrtc_provider_config_name}
 				COMMENT "Configuring external webrtc-native-build provider"
 			)
 
 			add_custom_target(humblenet_external_webrtc_provider_build
 				COMMAND ${CMAKE_COMMAND}
 					--build "${_external_webrtc_provider_build_dir}"
-					--config ${CMAKE_BUILD_TYPE}
+					${_external_webrtc_provider_build_config_args}
 				COMMENT "Building external webrtc-native-build provider"
 			)
 			add_dependencies(humblenet_external_webrtc_provider_build humblenet_external_webrtc_provider_configure)
@@ -208,7 +218,7 @@ if(HUMBLENET_NATIVE)
 			add_custom_target(humblenet_external_webrtc_provider_install
 				COMMAND ${CMAKE_COMMAND}
 					--build "${_external_webrtc_provider_build_dir}"
-					--config ${CMAKE_BUILD_TYPE}
+					${_external_webrtc_provider_build_config_args}
 					--target install
 				COMMENT "Installing external webrtc-native-build provider artifacts"
 			)
@@ -220,7 +230,7 @@ if(HUMBLENET_NATIVE)
 			file(STRINGS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/VERSION" _external_webrtc_provider_version LIMIT_COUNT 1)
 			if(_external_webrtc_provider_version)
 				set(_external_webrtc_install_root
-					"${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/dist/${CMAKE_BUILD_TYPE}/webrtc-native-build-${_external_webrtc_provider_version}")
+					"${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/dist/${_external_webrtc_provider_config_name}/webrtc-native-build-${_external_webrtc_provider_version}")
 			endif()
 		endif()
 

@@ -541,3 +541,25 @@ covering:
 - new backend files
 - runtime loading verification
 - test execution order
+
+## Current Design Validation Status
+
+Validated in repository:
+
+- provider is consumed as a submodule at `3rdparty/webrtc-native-build`
+- main CMake can bootstrap provider configure/build/install targets
+- provider install layout is detected from `dist/Release/webrtc-native-build-<version>`
+- external backend is built as `webrtc_shared` using the new Linux adapter
+- runtime loading path remains compatible with the existing dynamic-loader model
+
+Validated in runtime:
+
+- the external backend reaches offer/answer generation
+- ICE candidates are emitted through the HumbleNet callback bridge
+- `humblenet_test_webrtc` no longer fails at build/link stage
+
+Still unresolved:
+
+- peer connection setup does not reach the established/datachannel-ready state in `humblenet_test_webrtc`
+- test currently times out after SDP/ICE exchange
+- callback ordering, channel bootstrap behavior, or ICE candidate application still needs debugging

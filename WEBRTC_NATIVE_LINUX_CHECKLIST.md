@@ -696,3 +696,30 @@ The work is done when:
 - fallback to microstack still works
 - CI documents or validates the path
 - implementation and usage are documented
+
+## Latest Execution Status
+
+- `[x]` add and pin provider submodule
+- `[x]` inspect provider outputs and establish stable `dist/Release` layout
+- `[x]` add external WebRTC CMake option and helper targets
+- `[x]` implement initial `webrtc_native_linux.cpp`
+- `[x]` build provider artifacts through configure/build/install
+- `[x]` build external `libwebrtc.so`
+- `[x]` build `humblenet_test_webrtc`
+- `[x]` patch provider fork for Linux build issues discovered during implementation
+- `[~]` verify runtime loading and end-to-end connection establishment
+- `[ ]` add CI coverage
+- `[ ]` finish README/public documentation
+
+Observed runtime status:
+
+- the test binary launches and reaches SDP offer/answer plus ICE candidate exchange
+- the current result is `0 / 3 test were successful`
+- the visible failure mode is `call setup timed out`
+
+Remaining engineering focus:
+
+- inspect callback sequence during offer/answer application
+- verify ICE candidate routing and `sdp_mid` / m-line expectations
+- verify bootstrap datachannel lifecycle and channel-open notifications
+- re-run `humblenet_test_webrtc` until the three local test cases establish successfully
