@@ -8,6 +8,37 @@ The goal is to replace the current unreliable micro WebRTC implementation with a
 
 This is a migration plan and architectural context document. It is not an implementation spec yet.
 
+## Current Status
+
+This section tracks actual progress made in the repository.
+
+Completed:
+
+- migration context documents were added
+- external provider fork was added as a submodule at `3rdparty/webrtc-native-build`
+- top-level CMake options for external WebRTC were added
+- helper targets were added to configure/build/install the provider from the main project
+- external provider install layout autodetection was added
+- external Linux WebRTC configuration can now be enabled without failing before provider artifacts exist
+- a new modern backend file exists at `src/humblenet/webrtc/webrtc_native_linux.cpp`
+- the new backend is no longer a trivial stub; it now contains a modern `PeerConnection` / `DataChannel` adapter skeleton
+- the external backend path in `src/humblenet/CMakeLists.txt` was updated to use modern requirements such as `cxx_std_20` and `WEBRTC_POSIX`
+
+Partially completed:
+
+- provider bootstrap has started successfully
+- nested `depot_tools` inside the provider has been initialized
+- `fetch webrtc` has already succeeded
+- long-running `gclient sync` is in progress or may need to be resumed, depending on when this file is read
+
+Not yet completed:
+
+- provider build
+- provider install
+- final link of HumbleNet `libwebrtc.so` against installed provider artifacts
+- full test execution with `tests/test_webrtc.cpp`
+- CI coverage for the external backend path
+
 ## Scope
 
 - Target platform: Linux only
@@ -126,6 +157,12 @@ Expected result:
 
 - a reproducible set of Linux `libwebrtc` build artifacts
 
+Status:
+
+- partially done
+- provider source bootstrap is underway
+- final provider artifacts are not available yet
+
 ## Phase 3. Replace the obsolete native adapter
 
 Do not evolve the current old file as the main implementation target:
@@ -163,6 +200,13 @@ Expected result:
 
 - a new native backend compiled as `libwebrtc.so`
 
+Status:
+
+- partially done
+- `src/humblenet/webrtc/webrtc_native_linux.cpp` exists and implements a modern backend skeleton
+- the adapter already covers context, connection, data channel, SDP, ICE, and close/send entrypoints
+- it still needs full real-build validation and runtime testing against installed provider libraries
+
 ## Phase 4. CMake integration
 
 The current `3rdparty/chromium_webrtc/CMakeLists.txt` is tied to an outdated workflow and should not be the basis for the new path.
@@ -182,6 +226,14 @@ Build rules should:
 Expected result:
 
 - optional Linux external-WebRTC build path
+
+Status:
+
+- largely done for the bootstrap phase
+- external configuration flags and provider helper targets exist
+- provider install layout autodetection exists
+- the external path is intentionally allowed to configure before provider artifacts are installed
+- final link validation remains pending until provider install completes
 
 ## Phase 5. Runtime integration
 
@@ -224,6 +276,11 @@ Additionally verify:
 Expected result:
 
 - confidence that the new backend matches HumbleNet expectations
+
+Status:
+
+- not done yet
+- only syntax-level validation and repository integration work has been completed so far
 
 ## Phase 7. CI and packaging
 

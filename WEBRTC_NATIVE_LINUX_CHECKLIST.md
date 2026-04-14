@@ -11,6 +11,30 @@ Related context:
 
 This document is intentionally task-oriented and file-oriented.
 
+## Progress Snapshot
+
+Legend:
+
+- `[x]` done
+- `[~]` in progress or partially done
+- `[ ]` not done
+
+Current snapshot:
+
+- `[x]` planning and design documents added
+- `[x]` provider fork added as submodule
+- `[x]` external Linux WebRTC CMake options added
+- `[x]` helper provider configure/build/install targets added
+- `[x]` provider install layout autodetection added
+- `[x]` external configure path made bootstrap-safe before provider install exists
+- `[~]` modern Linux backend skeleton implemented in `src/humblenet/webrtc/webrtc_native_linux.cpp`
+- `[~]` provider bootstrap started, including nested `depot_tools` init and `fetch webrtc`
+- `[ ]` provider build
+- `[ ]` provider install
+- `[ ]` final external backend link validation
+- `[ ]` `tests/test_webrtc.cpp` on the external backend
+- `[ ]` CI coverage
+
 ## Success Criteria
 
 The migration is considered minimally successful when all of the following are true:
@@ -49,6 +73,10 @@ Done when:
 - submodule path exists
 - pinned commit is committed in HumbleNet
 
+Status:
+
+- `[x]` done
+
 ### 0.2 Add provider usage notes
 
 Tasks:
@@ -64,6 +92,11 @@ Preferred location:
 Done when:
 
 - another agent can build provider artifacts without rediscovering paths
+
+Status:
+
+- `[x]` done at the planning/design document level
+- `[~]` still worth extending later with exact build commands after first successful provider install
 
 ## Phase 1. Inspect Provider Outputs
 
@@ -91,6 +124,18 @@ Done when:
 
 - HumbleNet integration can refer to concrete provider output paths
 
+Status:
+
+- `[x]` done
+- identified provider install layout under:
+  - `3rdparty/webrtc-native-build/dist/<BuildType>/webrtc-native-build-<version>/include`
+  - `3rdparty/webrtc-native-build/dist/<BuildType>/webrtc-native-build-<version>/lib`
+- identified default Linux artifacts:
+  - `libwebrtc.a`
+  - `libboringssl.a`
+  - `libyuv_internal.a`
+  - system link deps such as `dl`, `X11`, `expat`
+
 ### 1.2 Decide HumbleNet linkage model
 
 Tasks:
@@ -105,6 +150,11 @@ Recommendation:
 Done when:
 
 - there is a clear link strategy for the new adapter library
+
+Status:
+
+- `[x]` done at the initial design level
+- current plan is to build HumbleNet `libwebrtc.so` as the ABI adapter and link it against provider-installed static libraries
 
 ## Phase 2. CMake Wiring
 
@@ -131,6 +181,10 @@ Done when:
 
 - configuration can be switched on explicitly without affecting default builds
 
+Status:
+
+- `[x]` done
+
 ### 2.2 Add provider-aware build logic
 
 Files:
@@ -148,6 +202,12 @@ Tasks:
 Done when:
 
 - CMake can configure a Linux build that includes the new backend target
+
+Status:
+
+- `[x]` done for bootstrap and path selection
+- external configuration path now works before provider artifacts are installed
+- final link validation still depends on provider install completing
 
 ### 2.3 Decide fate of old Chromium WebRTC CMake
 
@@ -169,6 +229,12 @@ Recommendation:
 Done when:
 
 - the new path does not depend on the obsolete path
+
+Status:
+
+- `[x]` done
+- the new external path does not rely on the obsolete Chromium integration
+- old path is still left in-tree as reference/fallback logic for future cleanup decisions
 
 ## Phase 3. New Linux Backend Implementation
 
@@ -192,6 +258,12 @@ Done when:
 
 - all backend ABI functions are implemented in the new Linux file set
 
+Status:
+
+- `[~]` in progress
+- the file exists and implements the full ABI surface structurally
+- real runtime validation against linked provider libs is still pending
+
 ### 3.2 Implement context object
 
 Primary file:
@@ -209,6 +281,12 @@ Tasks:
 Done when:
 
 - context creation and destruction work reliably
+
+Status:
+
+- `[~]` partially done
+- context object, thread ownership, and factory creation are implemented
+- reliability still needs linked-runtime testing
 
 ### 3.3 Implement connection object
 
@@ -228,6 +306,13 @@ Done when:
 
 - connections can be created, negotiated, and closed cleanly
 
+Status:
+
+- `[~]` partially done
+- connection object and peer connection observer are implemented
+- negotiation and close paths exist
+- real end-to-end negotiation is still unverified
+
 ### 3.4 Implement data channel object
 
 Primary file:
@@ -244,6 +329,12 @@ Tasks:
 Done when:
 
 - data can be exchanged bidirectionally over channels
+
+Status:
+
+- `[~]` partially done
+- channel observer, send, receive, open, and close paths are implemented
+- bidirectional exchange is not validated yet
 
 ### 3.5 Implement full ABI surface
 
@@ -271,6 +362,12 @@ Done when:
 
 - dynamic symbol loading can resolve the full expected interface
 
+Status:
+
+- `[~]` structurally done
+- functions are present in the new backend source
+- final exported-library validation remains pending
+
 ## Phase 4. Exported Library
 
 ### 4.1 Build HumbleNet backend shared library
@@ -290,6 +387,11 @@ Done when:
 
 - the produced library can be loaded by HumbleNet at runtime
 
+Status:
+
+- `[ ]` not done yet
+- blocked on provider build/install completing
+
 ### 4.2 Verify symbol visibility
 
 Files:
@@ -305,6 +407,10 @@ Tasks:
 Done when:
 
 - `dlopen` and `dlsym` can resolve all required symbols
+
+Status:
+
+- `[ ]` not done yet
 
 ## Phase 5. Runtime Loading
 
@@ -324,6 +430,11 @@ Done when:
 
 - runtime behavior is understood and reproduced intentionally
 
+Status:
+
+- `[x]` done at code-reading level
+- loader behavior in `src/humblenet/src/libwebrtc_dynamic.cpp` remains the expected runtime model
+
 ### 5.2 Improve diagnostics if needed
 
 File:
@@ -341,6 +452,12 @@ Tasks:
 Done when:
 
 - logs make backend selection unambiguous during testing
+
+Status:
+
+- `[~]` partially done
+- backend-side diagnostics were improved
+- loader-specific diagnostic refinement is still open if runtime testing shows ambiguity
 
 ## Phase 6. Functional Tests
 
@@ -360,6 +477,10 @@ Done when:
 
 - the test passes reliably
 
+Status:
+
+- `[ ]` not done yet
+
 ### 6.2 Validate fallback mode
 
 Relevant files:
@@ -376,6 +497,10 @@ Tasks:
 Done when:
 
 - fallback remains operational
+
+Status:
+
+- `[ ]` not done yet
 
 ### 6.3 Exercise failure paths
 
@@ -394,6 +519,10 @@ Tasks:
 Done when:
 
 - failure cases do not leak or crash
+
+Status:
+
+- `[ ]` not done yet
 
 ## Phase 7. Provider-Side Patches
 
@@ -422,6 +551,13 @@ Done when:
 
 - HumbleNet does not carry provider-specific hacks that belong upstream in the fork
 
+Status:
+
+- `[~]` in progress
+- one provider bootstrap issue was discovered: nested `3rdParty/depot_tools` was not initialized
+- it was handled locally by initializing provider submodules
+- no upstream patch to the fork has been committed from this repository yet
+
 ### 7.2 Update pinned submodule commit
 
 Files:
@@ -437,6 +573,10 @@ Tasks:
 Done when:
 
 - the repository reproduces the exact provider behavior needed
+
+Status:
+
+- `[ ]` not done yet
 
 ## Phase 8. CI
 
@@ -457,6 +597,10 @@ Done when:
 
 - CI covers the new Linux path
 
+Status:
+
+- `[ ]` not done yet
+
 ### 8.2 Preserve existing default path
 
 Likely file:
@@ -470,6 +614,12 @@ Tasks:
 Done when:
 
 - migration does not silently replace baseline coverage
+
+Status:
+
+- `[~]` partially done
+- local CMake verification shows the default path still configures successfully
+- CI confirmation is still pending
 
 ## Phase 9. Documentation
 
@@ -491,6 +641,12 @@ Tasks:
 Done when:
 
 - another engineer can build and run the Linux external backend from docs
+
+Status:
+
+- `[~]` partially done
+- internal migration/design/checklist docs are updated
+- public README-level usage docs are still pending
 
 ## File-by-File Summary
 

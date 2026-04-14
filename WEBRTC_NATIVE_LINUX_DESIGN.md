@@ -10,6 +10,30 @@ It builds on:
 
 This document describes the intended technical design for a new Linux `libwebrtc` backend, integration boundaries, repository structure decisions, and implementation details that should guide code changes.
 
+## Implementation Status
+
+This section records what has already been implemented in the repository.
+
+Completed:
+
+- the provider fork has been added as a submodule at `3rdparty/webrtc-native-build`
+- HumbleNet has a dedicated external Linux WebRTC configuration path
+- helper targets exist to configure/build/install the provider from the root project
+- autodetection of the provider install layout under `dist/<BuildType>/webrtc-native-build-<version>` exists
+- `src/humblenet/webrtc/webrtc_native_linux.cpp` now contains a modern backend skeleton instead of a placeholder stub
+- the external backend path in `src/humblenet/CMakeLists.txt` now requests modern language/platform requirements for upstream WebRTC
+
+In progress:
+
+- provider bootstrap through `fetch webrtc` and `gclient sync`
+- real integration validation against provider-built libraries
+
+Pending:
+
+- final provider build/install
+- successful link of HumbleNet external backend against installed provider artifacts
+- end-to-end runtime verification with HumbleNet tests
+
 ## Core Decisions
 
 ### External provider source
@@ -147,6 +171,11 @@ This is preferred over:
 - pointing to arbitrary local checkouts
 - depending on unpinned external branches
 
+Current status:
+
+- implemented
+- the submodule is present in the repository and points to `git@github.com:caiiiycuk/webrtc-native-build.git`
+
 ## Build and Artifact Model
 
 ## Provider side
@@ -199,6 +228,21 @@ The build should support:
 
 The default HumbleNet build must remain unchanged unless external WebRTC is explicitly enabled.
 
+Current status:
+
+- implemented for the bootstrap phase
+- current root CMake includes:
+  - `HUMBLENET_EXTERNAL_WEBRTC`
+  - `HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT`
+  - `HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR`
+  - `HUMBLENET_EXTERNAL_WEBRTC_LIB_DIR`
+  - `HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES`
+- helper targets exist:
+  - `humblenet_external_webrtc_provider_configure`
+  - `humblenet_external_webrtc_provider_build`
+  - `humblenet_external_webrtc_provider_install`
+- the external path is intentionally non-fatal before provider artifacts are installed
+
 ## Technical Design
 
 ## Main objects
@@ -225,6 +269,12 @@ Suggested object mapping:
   - implements `DataChannelObserver`
   - maps message and close events to HumbleNet callbacks
 
+Current status:
+
+- partially implemented in `src/humblenet/webrtc/webrtc_native_linux.cpp`
+- all three object types exist
+- observer classes for local/remote description handling also exist
+
 ## Thread model
 
 The thread model must be explicit and stable.
@@ -242,6 +292,12 @@ Must verify:
 - whether shutdown can race with pending callbacks
 
 Shutdown behavior must be deliberate. Destruction should not rely on implicit ordering.
+
+Current status:
+
+- partially implemented
+- the current backend skeleton creates dedicated network, worker, and signaling threads
+- shutdown behavior still needs runtime validation against the real linked provider
 
 ## Callback mapping
 
@@ -265,6 +321,12 @@ Important:
 - callback order matters
 - `DESTROY` must happen once and only after the object is actually done from HumbleNet's perspective
 
+Current status:
+
+- partially implemented
+- local description, ICE candidate, channel receive, channel open/close, established, disconnected, and destroy paths are already represented in the new backend skeleton
+- callback ordering still requires runtime verification
+
 ## SDP handling
 
 The adapter should:
@@ -278,6 +340,12 @@ Requirements:
 - robust parse failure handling
 - meaningful logging on parse errors
 - no silent partial setup
+
+Current status:
+
+- partially implemented
+- offer creation, answer creation, remote offer application, and remote answer application are already wired in the new backend skeleton
+- real negotiation testing is still pending
 
 ## ICE handling
 
@@ -293,6 +361,12 @@ Must verify with tests:
 - TURN-enabled operation
 - candidate ordering behavior
 - candidate delivery before and after remote description setup
+
+Current status:
+
+- partially implemented
+- outbound candidate serialization and inbound candidate parsing/injection are present in the new backend skeleton
+- real ICE behavior has not been validated yet
 
 ## Data channel behavior
 
@@ -310,6 +384,14 @@ Must verify:
 - reliability flags and ordering flags are set intentionally
 - `write` behavior matches HumbleNet assumptions
 - channel close does not double-fire destroy paths
+
+Current status:
+
+- partially implemented
+- bootstrap/default channel handling is present
+- explicit channel creation is present
+- send and close entrypoints are implemented
+- actual state and sequencing need runtime validation
 
 ## Error handling
 
@@ -370,6 +452,11 @@ Examples of changes that should remain on HumbleNet side instead:
 - HumbleNet callback mapping
 - HumbleNet runtime loading rules
 - project-specific CMake options
+
+Current status:
+
+- no provider fork patch has been committed from this repository yet
+- one provider-side issue was already discovered and worked around locally by initializing the nested `depot_tools` submodule
 
 ## Submodule update policy
 
