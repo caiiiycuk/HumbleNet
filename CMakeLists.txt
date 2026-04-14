@@ -187,6 +187,34 @@ if(HUMBLENET_NATIVE)
 			message(FATAL_ERROR "HUMBLENET_EXTERNAL_WEBRTC is currently supported on Linux only")
 		endif()
 
+		set(_external_webrtc_provider_build_dir "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/build")
+		if(EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/CMakeLists.txt")
+			add_custom_target(humblenet_external_webrtc_provider_configure
+				COMMAND ${CMAKE_COMMAND}
+					-S "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}"
+					-B "${_external_webrtc_provider_build_dir}"
+					-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+				COMMENT "Configuring external webrtc-native-build provider"
+			)
+
+			add_custom_target(humblenet_external_webrtc_provider_build
+				COMMAND ${CMAKE_COMMAND}
+					--build "${_external_webrtc_provider_build_dir}"
+					--config ${CMAKE_BUILD_TYPE}
+				COMMENT "Building external webrtc-native-build provider"
+			)
+			add_dependencies(humblenet_external_webrtc_provider_build humblenet_external_webrtc_provider_configure)
+
+			add_custom_target(humblenet_external_webrtc_provider_install
+				COMMAND ${CMAKE_COMMAND}
+					--build "${_external_webrtc_provider_build_dir}"
+					--config ${CMAKE_BUILD_TYPE}
+					--target install
+				COMMENT "Installing external webrtc-native-build provider artifacts"
+			)
+			add_dependencies(humblenet_external_webrtc_provider_install humblenet_external_webrtc_provider_build)
+		endif()
+
 		set(_external_webrtc_install_root "")
 		if(EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/VERSION")
 			file(STRINGS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/VERSION" _external_webrtc_provider_version LIMIT_COUNT 1)
