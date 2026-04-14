@@ -225,10 +225,12 @@ if(NOT EMSCRIPTEN)
 
 	set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET "")
 	set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native.cpp")
+	set(HUMBLENET_WEBRTC_SHARED_FEATURES cxx_auto_type cxx_range_for)
 
 	if(HUMBLENET_EXTERNAL_WEBRTC AND TARGET humblenet_external_webrtc)
 		set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET humblenet_external_webrtc)
 		set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native_linux.cpp")
+		list(APPEND HUMBLENET_WEBRTC_SHARED_FEATURES cxx_std_20)
 	elseif( TARGET chromium_webrtc )
 		set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET chromium_webrtc)
 	endif()
@@ -259,8 +261,9 @@ if(NOT EMSCRIPTEN)
 		DEFINES
 				WEBRTC_DLL_BUILD
 				$<$<BOOL:${HUMBLENET_EXTERNAL_WEBRTC}>:HUMBLENET_EXTERNAL_WEBRTC_PROVIDER>
+				$<$<BOOL:${HUMBLENET_EXTERNAL_WEBRTC}>:WEBRTC_POSIX>
 		FEATURES
-			cxx_auto_type cxx_range_for
+			${HUMBLENET_WEBRTC_SHARED_FEATURES}
 		PROPERTIES
 			OUTPUT_NAME webrtc
 			FOLDER HumbleNet/Library
