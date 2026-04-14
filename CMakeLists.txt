@@ -240,10 +240,6 @@ if(HUMBLENET_NATIVE)
 			set(_external_webrtc_lib_dir "${_external_webrtc_install_root}/lib")
 		endif()
 
-		if(NOT _external_webrtc_include_dir)
-			message(FATAL_ERROR "Set HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR or provide ${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/include")
-		endif()
-
 		set(_external_webrtc_libs ${HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES})
 		if(NOT _external_webrtc_libs AND _external_webrtc_lib_dir)
 			set(_external_webrtc_default_libs
@@ -273,21 +269,28 @@ if(HUMBLENET_NATIVE)
 			message(STATUS "HumbleNet external WebRTC libraries: none configured yet")
 		endif()
 
-		add_library(humblenet_external_webrtc INTERFACE)
-		target_include_directories(humblenet_external_webrtc
-			INTERFACE
-				"${_external_webrtc_include_dir}"
-		)
-		if(_external_webrtc_lib_dir)
-			target_link_directories(humblenet_external_webrtc
+		if(_external_webrtc_include_dir)
+			add_library(humblenet_external_webrtc INTERFACE)
+			target_include_directories(humblenet_external_webrtc
 				INTERFACE
-					"${_external_webrtc_lib_dir}"
+					"${_external_webrtc_include_dir}"
 			)
-		endif()
-		if(_external_webrtc_libs)
-			target_link_libraries(humblenet_external_webrtc
-				INTERFACE
-					${_external_webrtc_libs}
+			if(_external_webrtc_lib_dir)
+				target_link_directories(humblenet_external_webrtc
+					INTERFACE
+						"${_external_webrtc_lib_dir}"
+				)
+			endif()
+			if(_external_webrtc_libs)
+				target_link_libraries(humblenet_external_webrtc
+					INTERFACE
+						${_external_webrtc_libs}
+				)
+			endif()
+		else()
+			message(WARNING
+				"HUMBLENET_EXTERNAL_WEBRTC is enabled but provider headers were not found yet. "
+				"Run humblenet_external_webrtc_provider_install or set HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR manually."
 			)
 		endif()
 	endif()
