@@ -216,6 +216,35 @@ if(HUMBLENET_NATIVE)
 			message(FATAL_ERROR "Set HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR or provide ${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/include")
 		endif()
 
+		set(_external_webrtc_libs ${HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES})
+		if(NOT _external_webrtc_libs AND _external_webrtc_lib_dir)
+			set(_external_webrtc_default_libs
+				"${_external_webrtc_lib_dir}/libwebrtc.a"
+				"${_external_webrtc_lib_dir}/libboringssl.a"
+				"${_external_webrtc_lib_dir}/libyuv_internal.a"
+			)
+			set(_external_webrtc_have_default_libs ON)
+			foreach(_external_webrtc_default_lib ${_external_webrtc_default_libs})
+				if(NOT EXISTS "${_external_webrtc_default_lib}")
+					set(_external_webrtc_have_default_libs OFF)
+					break()
+				endif()
+			endforeach()
+			if(_external_webrtc_have_default_libs)
+				list(APPEND _external_webrtc_libs ${_external_webrtc_default_libs} dl X11 expat)
+			endif()
+		endif()
+
+		message(STATUS "HumbleNet external WebRTC include dir: ${_external_webrtc_include_dir}")
+		if(_external_webrtc_lib_dir)
+			message(STATUS "HumbleNet external WebRTC lib dir: ${_external_webrtc_lib_dir}")
+		endif()
+		if(_external_webrtc_libs)
+			message(STATUS "HumbleNet external WebRTC libraries: ${_external_webrtc_libs}")
+		else()
+			message(STATUS "HumbleNet external WebRTC libraries: none configured yet")
+		endif()
+
 		add_library(humblenet_external_webrtc INTERFACE)
 		target_include_directories(humblenet_external_webrtc
 			INTERFACE
@@ -227,10 +256,10 @@ if(HUMBLENET_NATIVE)
 					"${_external_webrtc_lib_dir}"
 			)
 		endif()
-		if(HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES)
+		if(_external_webrtc_libs)
 			target_link_libraries(humblenet_external_webrtc
 				INTERFACE
-					${HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES}
+					${_external_webrtc_libs}
 			)
 		endif()
 	endif()

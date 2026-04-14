@@ -1,5 +1,6 @@
 #include "../src/libwebrtc.h"
 
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,22 @@ struct libwebrtc_data_channel {
 	std::string name;
 	bool closed;
 };
+
+static int report_unimplemented(libwebrtc_connection* connection, const char* operation) {
+	if(connection && connection->ctx && connection->ctx->callback) {
+		connection->ctx->callback(
+			connection->ctx,
+			connection,
+			nullptr,
+			LWRTC_CALLBACK_ERROR,
+			connection->user_data,
+			(void*)operation,
+			operation ? (int)std::char_traits<char>::length(operation) : 0
+		);
+	}
+	std::fprintf(stderr, "webrtc_native_linux: unimplemented operation: %s\n", operation ? operation : "(unknown)");
+	return 0;
+}
 
 extern "C" {
 
@@ -87,26 +104,25 @@ struct libwebrtc_data_channel* libwebrtc_create_channel(struct libwebrtc_connect
 }
 
 int libwebrtc_create_offer(struct libwebrtc_connection* connection) {
-	(void)connection;
-	return 0;
+	return report_unimplemented(connection, "libwebrtc_create_offer");
 }
 
 int libwebrtc_set_offer(struct libwebrtc_connection* connection, const char* sdp) {
 	(void)connection;
 	(void)sdp;
-	return 0;
+	return report_unimplemented(connection, "libwebrtc_set_offer");
 }
 
 int libwebrtc_set_answer(struct libwebrtc_connection* connection, const char* sdp) {
 	(void)connection;
 	(void)sdp;
-	return 0;
+	return report_unimplemented(connection, "libwebrtc_set_answer");
 }
 
 int libwebrtc_add_ice_candidate(struct libwebrtc_connection* connection, const char* candidate) {
 	(void)connection;
 	(void)candidate;
-	return 0;
+	return report_unimplemented(connection, "libwebrtc_add_ice_candidate");
 }
 
 int libwebrtc_write(struct libwebrtc_data_channel* channel, const void* data, int len) {
