@@ -61,6 +61,16 @@ endif()
 
 option(HUMBLENET_SERVER "Build the humblenet Server" ${HUMBLENET_DESKTOP})
 option(HUMBLENET_TESTS "Build the humblenet tests" ON)
+option(HUMBLENET_EXTERNAL_WEBRTC "Build Linux external libwebrtc backend" OFF)
+
+set(HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/webrtc-native-build" CACHE PATH
+	"Location of the webrtc-native-build provider checkout")
+set(HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR "" CACHE PATH
+	"Include directory for external Linux libwebrtc headers")
+set(HUMBLENET_EXTERNAL_WEBRTC_LIB_DIR "" CACHE PATH
+	"Library directory for external Linux libwebrtc artifacts")
+set(HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES "" CACHE STRING
+	"Semicolon-separated list of external Linux libwebrtc libraries")
 
 if(LINUX OR APPLE)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
@@ -171,6 +181,44 @@ if(HUMBLENET_NATIVE)
 	add_subdirectory(3rdparty/webrtc		webrtc)
 
 	add_subdirectory(3rdparty/chromium_webrtc		chromium_webrtc)
+
+	if(HUMBLENET_EXTERNAL_WEBRTC)
+		if(NOT LINUX)
+			message(FATAL_ERROR "HUMBLENET_EXTERNAL_WEBRTC is currently supported on Linux only")
+		endif()
+
+		set(_external_webrtc_include_dir "${HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR}")
+		if(NOT _external_webrtc_include_dir AND EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/include")
+			set(_external_webrtc_include_dir "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/include")
+		endif()
+
+		set(_external_webrtc_lib_dir "${HUMBLENET_EXTERNAL_WEBRTC_LIB_DIR}")
+		if(NOT _external_webrtc_lib_dir AND EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/lib")
+			set(_external_webrtc_lib_dir "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/lib")
+		endif()
+
+		if(NOT _external_webrtc_include_dir)
+			message(FATAL_ERROR "Set HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR or provide ${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/include")
+		endif()
+
+		add_library(humblenet_external_webrtc INTERFACE)
+		target_include_directories(humblenet_external_webrtc
+			INTERFACE
+				"${_external_webrtc_include_dir}"
+		)
+		if(_external_webrtc_lib_dir)
+			target_link_directories(humblenet_external_webrtc
+				INTERFACE
+					"${_external_webrtc_lib_dir}"
+			)
+		endif()
+		if(HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES)
+			target_link_libraries(humblenet_external_webrtc
+				INTERFACE
+					${HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES}
+			)
+		endif()
+	endif()
 
 	if(NOT WIN32)
 		find_package(ZLIB)

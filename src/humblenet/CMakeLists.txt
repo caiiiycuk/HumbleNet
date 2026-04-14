@@ -223,7 +223,17 @@ endif()
 
 if(NOT EMSCRIPTEN)
 
-	if( TARGET chromium_webrtc )
+	set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET "")
+	set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native.cpp")
+
+	if(HUMBLENET_EXTERNAL_WEBRTC AND TARGET humblenet_external_webrtc)
+		set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET humblenet_external_webrtc)
+		set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native_linux.cpp")
+	elseif( TARGET chromium_webrtc )
+		set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET chromium_webrtc)
+	endif()
+
+	if(HUMBLENET_WEBRTC_SHARED_LINK_TARGET)
 		if(APPLE)
 			set(WEBRTC_PLATFORM_EXPORT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/webrtc/exported_osx.map")
 			set(WEBRTC_PLATFORM_EXPORT "-exported_symbols_list ${WEBRTC_PLATFORM_EXPORT_FILE}")
@@ -238,19 +248,24 @@ if(NOT EMSCRIPTEN)
 		DIRS
 			webrtc
 		FILES
+			${CMAKE_CURRENT_SOURCE_DIR}/${HUMBLENET_WEBRTC_SHARED_SOURCE}
 			${WEBRTC_PLATFORM_EXPORT_FILE}
+		EXCLUDE
+			webrtc/webrtc_native.cpp
+			webrtc/webrtc_native_linux.cpp
 		INCLUDES
 			PRIVATE
 				src
 		DEFINES
 				WEBRTC_DLL_BUILD
+				$<$<BOOL:${HUMBLENET_EXTERNAL_WEBRTC}>:HUMBLENET_EXTERNAL_WEBRTC_PROVIDER>
 		FEATURES
 			cxx_auto_type cxx_range_for
 		PROPERTIES
 			OUTPUT_NAME webrtc
 			FOLDER HumbleNet/Library
 		LINK
-			chromium_webrtc
+			${HUMBLENET_WEBRTC_SHARED_LINK_TARGET}
 			${WEBRTC_PLATFORM_EXPORT}
 		)
 	endif()
