@@ -16,7 +16,7 @@ fi
 
 export PUBLIC_IP TURN_SECRET
 export RELAY_PORT_MIN="${RELAY_PORT_MIN:-49152}"
-export RELAY_PORT_MAX="${RELAY_PORT_MAX:-49252}"
+export RELAY_PORT_MAX="${RELAY_PORT_MAX:-65535}"
 
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 CONF="/etc/turnserver.conf"

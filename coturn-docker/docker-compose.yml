@@ -35,6 +35,10 @@ services:
     restart: unless-stopped
     logging: *default-logging
     network_mode: host
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 1048576
     volumes:
       - coturn-data:/var/lib/coturn
       - certbot-certs:/etc/letsencrypt:ro
