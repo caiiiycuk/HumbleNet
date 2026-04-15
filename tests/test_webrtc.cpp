@@ -4,8 +4,11 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <atomic>
+#include <mutex>
 
 static internal_context_t* context;
+static std::mutex msg_queue_mutex;
 
 bool do_wait( int* pms ) {
 	
@@ -28,6 +31,7 @@ bool do_wait( int* pms ) {
 static int on_data(internal_socket_t*, const void* data, int len, void* user_data )
 {
 	auto mgs_queue = reinterpret_cast<std::vector<std::string>*>(user_data);
+	std::lock_guard<std::mutex> lock(msg_queue_mutex);
 	
 	mgs_queue->push_back( std::string( (const char*)data, len ) );
 
@@ -122,6 +126,25 @@ static bool run_message_test(const char *label, internal_socket_t *left, interna
 	
 	int timeout = 5000;
 	for (received_message_count = 0; received_message_count < expected_message_count; ) {
+		{
+			std::lock_guard<std::mutex> lock(msg_queue_mutex);
+			for( auto it = msg_queue.begin(); it != msg_queue.end(); ) {
+				const char* received_message = it->c_str();
+				
+				printf("[%s] received message: %s\n", label, received_message);
+				
+				received_message_count++;
+				
+				msg_queue.erase(it);
+				
+				it = msg_queue.begin();
+			}
+		}
+
+		if(received_message_count >= expected_message_count) {
+			break;
+		}
+
 		do_wait(&timeout);
 	
 		// detect time has run out...
@@ -129,18 +152,6 @@ static bool run_message_test(const char *label, internal_socket_t *left, interna
 		{
 			printf("[%s] *** timeout while waiting for message\n", label);
 			break;
-		}
-		
-		for( auto it = msg_queue.begin(); it != msg_queue.end(); ) {
-			const char* received_message = it->c_str();
-			
-			printf("[%s] received message: %s\n", label, received_message);
-			
-			received_message_count++;
-			
-			msg_queue.erase(it);
-			
-			it = msg_queue.begin();
 		}
 	}
 	
@@ -161,7 +172,7 @@ static bool run_message_test(const char *label, internal_socket_t *left, interna
  * This sets up a left and right socket, then sends data and verifies it was all received.
  *
  */
-bool connected = false;
+static std::atomic<bool> connected{false};
 int run_webrtc_data_test() {
 	
 	internal_callbacks_t caller;
@@ -178,7 +189,7 @@ int run_webrtc_data_test() {
 	caller.on_connect = on_connected;
 	caller.on_connect_channel = [] ( internal_socket_t* socket, const char* name, void* user_data ) -> int {
 		printf("connected sockets using channel: %s\n", name );
-		connected = true;
+		connected.store(true);
 		return 0;
 	};
 	
@@ -192,12 +203,16 @@ int run_webrtc_data_test() {
 	internal_set_data(right,left);
 	
 	// this will trigger the whole process.
+	connected.store(false);
 	internal_create_offer(left);
 	
 	int timeout = 5000;
-	connected = false;
-	while( ! connected ) {
+	while( !connected.load() ) {
 		do_wait(&timeout);
+
+		if( connected.load() ) {
+			break;
+		}
 
 		if( timeout <= 0 ) {
 			printf("call setup timed out\n");

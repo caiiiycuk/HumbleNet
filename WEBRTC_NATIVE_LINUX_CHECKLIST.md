@@ -27,13 +27,14 @@ Current snapshot:
 - `[x]` helper provider configure/build/install targets added
 - `[x]` provider install layout autodetection added
 - `[x]` external configure path made bootstrap-safe before provider install exists
-- `[~]` modern Linux backend skeleton implemented in `src/humblenet/webrtc/webrtc_native_linux.cpp`
-- `[~]` provider bootstrap started, including nested `depot_tools` init and `fetch webrtc`
-- `[ ]` provider build
-- `[ ]` provider install
-- `[ ]` final external backend link validation
+- `[~]` modern Linux backend implemented and builds, but runtime semantics still need stabilization
+- `[x]` provider bootstrap completed, including nested `depot_tools`, `fetch webrtc`, and `gclient sync`
+- `[x]` provider build
+- `[x]` provider install
+- `[x]` final external backend link validation
 - `[ ]` `tests/test_webrtc.cpp` on the external backend
 - `[ ]` CI coverage
+- `[~]` external backend is confirmed to load at runtime, but connection establishment is blocked in the current environment by zero-network ICE behavior
 
 ## Success Criteria
 
@@ -207,7 +208,7 @@ Status:
 
 - `[x]` done for bootstrap and path selection
 - external configuration path now works before provider artifacts are installed
-- final link validation still depends on provider install completing
+- provider install layout is detected and the external backend now links against installed provider libraries
 
 ### 2.3 Decide fate of old Chromium WebRTC CMake
 
@@ -389,8 +390,8 @@ Done when:
 
 Status:
 
-- `[ ]` not done yet
-- blocked on provider build/install completing
+- `[x]` done
+- `libwebrtc.so` is produced and can be loaded by the HumbleNet runtime path
 
 ### 4.2 Verify symbol visibility
 

@@ -25,13 +25,11 @@ Completed:
 
 In progress:
 
-- provider bootstrap through `fetch webrtc` and `gclient sync`
-- real integration validation against provider-built libraries
+- end-to-end runtime validation against provider-built libraries
+- connection-establishment and datachannel-lifecycle debugging in `humblenet_test_webrtc`
 
 Pending:
 
-- final provider build/install
-- successful link of HumbleNet external backend against installed provider artifacts
 - end-to-end runtime verification with HumbleNet tests
 
 ## Core Decisions
@@ -557,9 +555,11 @@ Validated in runtime:
 - the external backend reaches offer/answer generation
 - ICE candidates are emitted through the HumbleNet callback bridge
 - `humblenet_test_webrtc` no longer fails at build/link stage
+- provider artifacts are built and installed from the submodule, and the HumbleNet adapter links against them
 
 Still unresolved:
 
-- peer connection setup does not reach the established/datachannel-ready state in `humblenet_test_webrtc`
-- test currently times out after SDP/ICE exchange
-- callback ordering, channel bootstrap behavior, or ICE candidate application still needs debugging
+- peer connection setup does not yet reach the established/datachannel-ready state in `humblenet_test_webrtc`
+- the external backend now loads and emits modern SDP, so fallback-to-microstack is no longer the primary issue
+- in the current environment `BasicNetworkManager` reports zero detected networks, which blocks normal ICE gathering
+- a loopback/test fallback path is being explored, but is currently not stable enough to count as done

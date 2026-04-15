@@ -26,17 +26,13 @@ Completed:
 
 Partially completed:
 
-- provider bootstrap has started successfully
-- nested `depot_tools` inside the provider has been initialized
-- `fetch webrtc` has already succeeded
-- long-running `gclient sync` is in progress or may need to be resumed, depending on when this file is read
+- provider bootstrap, `fetch webrtc`, and `gclient sync` have completed
+- provider build/install required Linux-side fixes in the fork and those fixes were applied
+- runtime validation is in progress against the installed provider artifacts
 
 Not yet completed:
 
-- provider build
-- provider install
-- final link of HumbleNet `libwebrtc.so` against installed provider artifacts
-- full test execution with `tests/test_webrtc.cpp`
+- successful end-to-end execution of `tests/test_webrtc.cpp`
 - CI coverage for the external backend path
 
 ## Scope
@@ -229,11 +225,12 @@ Expected result:
 
 Status:
 
-- largely done for the bootstrap phase
+- done for build and link integration
 - external configuration flags and provider helper targets exist
 - provider install layout autodetection exists
 - the external path is intentionally allowed to configure before provider artifacts are installed
-- final link validation remains pending until provider install completes
+- HumbleNet `libwebrtc.so` now links against the installed provider artifacts
+- remaining work is runtime stabilization rather than build-system wiring
 
 ## Phase 5. Runtime integration
 
@@ -407,5 +404,8 @@ covering:
 
 Current runtime result:
 
-- `humblenet_test_webrtc.bin.x86_64` starts, exchanges SDP and ICE candidates, but ends with `call setup timed out`
-- this means the migration is past build/link integration and is now blocked on connection-establishment behavior
+- external `libwebrtc.so` is now actually loaded by the dynamic backend path
+- modern SDP generation is confirmed in `humblenet_test_webrtc.bin.x86_64`
+- Linux test execution in the current environment exposes a zero-network condition for `BasicNetworkManager`, which prevents normal ICE candidate gathering
+- a test-only fallback investigation using fake/loopback allocation is in progress, but it is currently blocked on allocator thread-affinity and provider packaging gaps
+- this means the migration is past build/link integration and now blocked on runtime connection establishment in the current environment
