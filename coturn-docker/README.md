@@ -222,6 +222,8 @@ All settings are in the `.env` file:
 | `ACME_PORT`        | Host port for ACME challenges. Set to a non-standard port (e.g. `9080`) when proxying through a host nginx.                          | `80`         |
 | `RELAY_PORT_MIN`   | Start of UDP relay port range                                                                                                        | `49152`      |
 | `RELAY_PORT_MAX`   | End of UDP relay port range                                                                                                          | `65535`      |
+| `TOTAL_QUOTA`      | Maximum concurrent TURN allocations across the server                                                                                | `600`        |
+| `USER_QUOTA`       | Maximum concurrent TURN allocations for one REST username                                                                            | `600`        |
 | `PUBLIC_IP`        | VPS public IP (auto-detected if empty)                                                                                               | *(auto)*     |
 | `PUBLISH_URL`      | URL to POST iceServers + traffic JSON to (empty = disabled)                                                                          | *(empty)*    |
 | `PUBLISH_INTERVAL` | Seconds between iceServers publications                                                                                              | `60`         |
@@ -237,7 +239,7 @@ When `PUBLISH_URL` is set, the entrypoint POSTs the following JSON every `PUBLIS
     { "urls": ["stun:turn.example.com:3478"] },
     {
       "urls": ["turn:turn.example.com:3478", "turns:turn.example.com:5349"],
-      "username": "1740000000",
+      "username": "1740000000:session-id",
       "credential": "base64-hmac..."
     }
   ],
@@ -249,6 +251,8 @@ When `PUBLISH_URL` is set, the entrypoint POSTs the following JSON every `PUBLIS
 ```
 
 The `traffic` object reports total bytes relayed by coturn (received + sent), tracked via coturn's built-in prometheus metrics. Counters reset at midnight (daily) and on the 1st of each month. Stats persist across container restarts via the `coturn-data` volume.
+
+The published `turnSecret` is intended for a trusted backend. Do not cache and serve the same generated `username`/`credential` pair to all browsers unless `USER_QUOTA` is sized for all concurrent allocations using that shared username. The safer production pattern is to mint a fresh REST username per client/session request.
 
 ### Proxying ACME through host nginx
 
@@ -348,9 +352,9 @@ This server uses **TURN REST API** authentication (RFC 5766 extension). Your bac
 ```javascript
 const crypto = require("crypto");
 
-function getTurnCredentials(secret, ttlSeconds = 86400) {
+function getTurnCredentials(secret, ttlSeconds = 86400, identity = crypto.randomUUID()) {
   const timestamp = Math.floor(Date.now() / 1000) + ttlSeconds;
-  const username = timestamp.toString();
+  const username = `${timestamp}:${identity}`;
   const hmac = crypto.createHmac("sha1", secret);
   hmac.update(username);
   const credential = hmac.digest("base64");
@@ -359,7 +363,8 @@ function getTurnCredentials(secret, ttlSeconds = 86400) {
 
 // Express example
 app.get("/api/turn-credentials", (req, res) => {
-  const creds = getTurnCredentials(process.env.TURN_SECRET);
+  const identity = req.sessionID || crypto.randomUUID();
+  const creds = getTurnCredentials(process.env.TURN_SECRET, 86400, identity);
   res.json({
     ...creds,
     urls: [
@@ -376,9 +381,9 @@ app.get("/api/turn-credentials", (req, res) => {
 ```python
 import hmac, hashlib, base64, time
 
-def get_turn_credentials(secret: str, ttl: int = 86400):
+def get_turn_credentials(secret: str, ttl: int = 86400, identity: str | None = None):
     timestamp = int(time.time()) + ttl
-    username = str(timestamp)
+    username = f"{timestamp}:{identity or str(time.time_ns())}"
     dig = hmac.new(secret.encode(), username.encode(), hashlib.sha1).digest()
     credential = base64.b64encode(dig).decode()
     return {"username": username, "credential": credential}
@@ -603,7 +608,7 @@ Generate ephemeral credentials, then test:
 # Generate credentials (valid for 24h)
 SECRET=$(grep TURN_SECRET .env | cut -d= -f2)
 TIMESTAMP=$(($(date +%s) + 86400))
-USERNAME="$TIMESTAMP"
+USERNAME="$TIMESTAMP:cli-test-$(date +%s)"
 CREDENTIAL=$(echo -n "$USERNAME" | openssl dgst -sha1 -hmac "$SECRET" -binary | base64)
 
 echo "Username: $USERNAME"
@@ -722,6 +727,12 @@ docker compose logs -f
 - Test with the built-in test page at `https://your-domain:8000/` (enter your TURN_SECRET)
 - Test from CLI using the ephemeral credential generation commands in the Monitoring section above
 
+**Firefox says "ICE failed, your TURN server appears to be broken"**
+
+- In `about:webrtc`, check the TURN allocation errors. A first `401` response is normal REST auth challenge.
+- If the retry fails with STUN error `486`, coturn is rejecting allocation because the quota for that REST username is exhausted.
+- This usually means many clients are sharing the same generated `username`/`credential` pair. Generate credentials per client/session, or raise `USER_QUOTA` and `TOTAL_QUOTA` in `.env`, then restart coturn with `docker compose up -d --force-recreate coturn`.
+
 **Coturn fails to start**
 
 - Check if ports 3478 or 5349 are already in use by another service
@@ -738,4 +749,3 @@ docker compose logs -f
 - `docker compose ps` shows "unhealthy"
 - For coturn: check if port 3478 is reachable — `docker compose exec coturn turnutils_stunclient localhost`
 - For nginx: check config — `docker compose exec nginx nginx -t`
-
