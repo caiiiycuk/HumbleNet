@@ -226,15 +226,11 @@ endif()
 if(NOT EMSCRIPTEN)
 
 	set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET "")
-	set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native.cpp")
-	set(HUMBLENET_WEBRTC_SHARED_FEATURES cxx_auto_type cxx_range_for)
+	set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native_linux.cpp")
+	set(HUMBLENET_WEBRTC_SHARED_FEATURES cxx_auto_type cxx_range_for cxx_std_20)
 
 	if(HUMBLENET_EXTERNAL_WEBRTC AND TARGET humblenet_external_webrtc)
 		set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET humblenet_external_webrtc)
-		set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native_linux.cpp")
-		list(APPEND HUMBLENET_WEBRTC_SHARED_FEATURES cxx_std_20)
-	elseif( TARGET chromium_webrtc )
-		set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET chromium_webrtc)
 	endif()
 
 	if(HUMBLENET_WEBRTC_SHARED_LINK_TARGET)
@@ -255,7 +251,6 @@ if(NOT EMSCRIPTEN)
 			${CMAKE_CURRENT_SOURCE_DIR}/${HUMBLENET_WEBRTC_SHARED_SOURCE}
 			${WEBRTC_PLATFORM_EXPORT_FILE}
 		EXCLUDE
-			webrtc/webrtc_native.cpp
 			webrtc/webrtc_native_linux.cpp
 		INCLUDES
 			PRIVATE

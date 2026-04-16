@@ -180,8 +180,6 @@ if(HUMBLENET_NATIVE)
 
 	add_subdirectory(3rdparty/webrtc		webrtc)
 
-	add_subdirectory(3rdparty/chromium_webrtc		chromium_webrtc)
-
 	if(HUMBLENET_EXTERNAL_WEBRTC)
 		if(NOT LINUX)
 			message(FATAL_ERROR "HUMBLENET_EXTERNAL_WEBRTC is currently supported on Linux only")

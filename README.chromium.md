@@ -2,7 +2,7 @@
 
 This document explains how to build HumbleNet with the external Chromium-based `libwebrtc` backend and how to verify that this path is actually being used.
 
-Important: in this repository, "chromium-webrtc" means the new Linux path through the external provider in `3rdparty/webrtc-native-build`. The old in-tree target in `3rdparty/chromium_webrtc` is marked obsolete in the planning documents and should not be used as the main workflow.
+Important: in this repository, "chromium-webrtc" means the Linux path through the external provider in `3rdparty/webrtc-native-build`. The old in-tree Chromium integration has been removed and is no longer part of the build.
 
 ## Expected Outcome
 
