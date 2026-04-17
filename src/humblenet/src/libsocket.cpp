@@ -296,6 +296,7 @@ internal_context_t* internal_init(internal_callbacks_t* callbacks) {
 	info.port = CONTEXT_PORT_NO_LISTEN;
 	info.gid = -1;
 	info.uid = -1;
+	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
 #if 0
 #if defined __APPLE__ || defined(__linux__)
 	// test a few wll known locations
@@ -505,4 +506,3 @@ int internal_write_socket(internal_socket_t* socket, const void *buf, int bufsiz
 	// bad/disconnected socket
 	return -1;
 }
-

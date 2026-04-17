@@ -200,7 +200,9 @@ struct lws_context* lws_create_context_extended( lws_context_creation_info* info
 	LibWebSocket_Module* module = new (malloc(sizeof(LibWebSocket_Module))) LibWebSocket_Module(const_cast<lws_protocols*>(info->protocols));
 	info->user = module;
 	// hook in our default protocol handler (will delegate to the user provided)
+#if !defined(LWS_WITHOUT_EXTENSIONS)
 	info->extensions = poll_extension;
+#endif
 
 	// insert into poll chain...
 	poll_init();

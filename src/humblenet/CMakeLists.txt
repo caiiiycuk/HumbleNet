@@ -264,13 +264,29 @@ if(NOT EMSCRIPTEN)
 		PROPERTIES
 			OUTPUT_NAME webrtc
 			FOLDER HumbleNet/Library
-		LINK
-			${HUMBLENET_WEBRTC_SHARED_LINK_TARGET}
-			${WEBRTC_PLATFORM_EXPORT}
-		)
-	endif()
-	
-	CreateSharedLibrary(humblenet_shared
+			LINK
+				${HUMBLENET_WEBRTC_SHARED_LINK_TARGET}
+				${WEBRTC_PLATFORM_EXPORT}
+			)
+
+			set(_webrtc_copy_script "${CMAKE_CURRENT_BINARY_DIR}/copy_webrtc_shared_to_build_root.cmake")
+			file(WRITE "${_webrtc_copy_script}"
+				"get_filename_component(target_dir \"\${TARGET_FILE}\" DIRECTORY)\n"
+				"if(NOT target_dir STREQUAL \"\${BUILD_DIR}\")\n"
+				"  execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy_if_different \"\${TARGET_FILE}\" \"\${BUILD_DIR}/\")\n"
+				"endif()\n"
+			)
+			add_custom_command(TARGET webrtc_shared
+				POST_BUILD
+				COMMAND "${CMAKE_COMMAND}"
+					-DTARGET_FILE="$<TARGET_FILE:webrtc_shared>"
+					-DBUILD_DIR="${CMAKE_BINARY_DIR}"
+					-P "${_webrtc_copy_script}"
+				COMMENT "Copying libwebrtc.so to the build root"
+			)
+		endif()
+		
+		CreateSharedLibrary(humblenet_shared
 	${CORE_HUMBLENET}
 	FILES
 		${PLATFORM_EXPORT_FILE}
