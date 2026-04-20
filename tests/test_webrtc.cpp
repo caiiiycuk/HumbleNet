@@ -1,5 +1,7 @@
+#include "humblenet.h"
 #include "libsocket.h"
 #include "libpoll.h"
+#include "humblepeer.h"
 
 #include <string>
 #include <vector>
@@ -235,8 +237,8 @@ int main(int argc, char **argv)
 	
 	context = internal_init(  &callbacks );
 	
-	const char* stun[] = { HUMBLENET_SERVER_URL };
-	internal_set_stun_servers(context, stun, 1);
+	humblenet::ICEServer iceServers[] = { humblenet::ICEServer(HUMBLENET_SERVER_URL) };
+	internal_set_ice_servers(context, iceServers, 1);
 
 	{
 		success_count += run_webrtc_data_test(); test_count++;

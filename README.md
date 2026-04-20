@@ -71,23 +71,6 @@ Follow steps from [action file](https://github.com/caiiiycuk/HumbleNet/blob/mast
 Confiugring
 ===========
 
-peer-server can read configuration file with ` --ice-servers` flag, the format of config is following:
-
-```text
-stun:<address>
-turn:<address> [user] [password]
-turns:<address> [user] [password]
-```
-
-For example:
-
-```text
-stun:stun.l.google.com:19302
-stun:global.expressturn.com:3478
-turn:global.expressturn.com:3478 user pass
-turns:relay1.expressturn.com:443?transport=tcp user pass
-```
-
 Additionaly you can configure iceServes via js:
 ```js
 window.netConfig = {
@@ -97,4 +80,35 @@ window.netConfig = {
 }
 ```
 
+Native clients must provide their own ICE server list with
+`humblenet_set_iceservers()` before establishing WebRTC/P2P connections.
+`peer-server` no longer sends ICE servers to native clients through
+`HelloClient`, so STUN/TURN configuration now has to be supplied by the
+application.
 
+For Linux production deployments, the intended backend is the external
+Chromium WebRTC implementation documented in [README.chromium.md](/home/caiiiycuk/js-dos/HumbleNet/README.chromium.md).
+That is the path that should be validated for real NAT traversal behavior.
+The internal microstack backend is retained only as a demo and fallback path.
+It is not the recommended production stack and should not be treated as the
+reference implementation for feature completeness or ICE behavior.
+
+Current microstack limitations:
+
+- it is a fallback/demo backend, not the primary production target;
+- it does not aim to match the Linux Chromium backend feature-for-feature;
+- only the first TURN entry is currently applied on that backend, so multi-TURN
+  failover configurations are not fully represented there.
+
+Example JSON accepted by `humblenet_set_iceservers()`:
+
+```json
+[
+  { "urls": ["stun:stun.l.google.com:19302"] },
+  {
+    "urls": ["turn:global.expressturn.com:3478?transport=udp"],
+    "username": "user",
+    "credential": "pass"
+  }
+]
+```

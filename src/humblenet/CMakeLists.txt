@@ -110,6 +110,7 @@ set(CORE_HUMBLENET
 			include
 		PRIVATE
 			src
+			../../3rdparty/json-parser
 	FEATURES
 		cxx_auto_type cxx_range_for
 	DEFINES
@@ -120,6 +121,7 @@ set(CORE_HUMBLENET
 			HUMBLENET_LOAD_WEBRTC
 	LINK
 		humblepeer
+		jsonparser
 		${PLATFORM_LIBRARIES}
 		$<$<BOOL:${DL_LIBRARY}>:${DL_LIBRARY}>
 	PROPERTIES

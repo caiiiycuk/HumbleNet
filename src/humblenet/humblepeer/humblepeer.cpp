@@ -144,28 +144,12 @@ namespace humblenet {
 	}
 
 
-	ha_bool sendHelloClient(P2PSignalConnection *conn, PeerId peerId, const std::string& reconnectToken, const std::vector<ICEServer>& iceServers)
+	ha_bool sendHelloClient(P2PSignalConnection *conn, PeerId peerId, const std::string& reconnectToken)
 	{
 		flatbuffers::FlatBufferBuilder fbb(DEFAULT_FBB_SIZE);
 
-		std::vector<flatbuffers::Offset<HumblePeer::ICEServer>> tempServers;
-		tempServers.reserve(iceServers.size());
-
-		for( auto& it : iceServers) {
-			auto server = fbb.CreateString(it.server);
-			flatbuffers::Offset<HumblePeer::ICEServer> s;
-
-			if (it.type == HumblePeer::ICEServerType::STUNServer) {
-				s = HumblePeer::CreateICEServer(fbb, HumblePeer::ICEServerType::STUNServer, server);
-			} else { // turn server
-				s = HumblePeer::CreateICEServer(fbb, HumblePeer::ICEServerType::TURNServer, server, fbb.CreateString(it.username), fbb.CreateString(it.password));
-			}
-			tempServers.emplace_back( s );
-		}
-
 		auto packet = HumblePeer::CreateHelloClient(fbb, peerId,
-													CreateFBBStringIfNotEmpty(fbb, reconnectToken),
-													CreateFBBVectorIfNotEmpty(fbb, tempServers));
+													CreateFBBStringIfNotEmpty(fbb, reconnectToken));
 		auto msg = HumblePeer::CreateMessage(fbb, HumblePeer::MessageType::HelloClient, packet.Union());
 		fbb.Finish(msg);
 

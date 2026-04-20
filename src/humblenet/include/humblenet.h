@@ -79,6 +79,14 @@ HUMBLENET_API uint32_t HUMBLENET_CALL humblenet_version();
 HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_init();
 
 /*
+ * Set or replace the list of ICE servers used for new WebRTC connections.
+ * Native clients must configure ICE servers explicitly with this API.
+ * peer-server no longer injects ICE servers into HelloClient for native apps.
+ * Pass NULL, an empty string, or [] to clear the current configuration.
+ */
+HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_set_iceservers(const char* json);
+
+/*
  * Shutdown the entire humblenet library
  */
 HUMBLENET_API void HUMBLENET_CALL humblenet_shutdown();

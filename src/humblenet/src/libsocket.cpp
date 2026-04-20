@@ -14,7 +14,9 @@
 #include <openssl/ssl.h>
 #endif
 
+#include "humblenet.h"
 #include "libwebrtc.h"
+#include "humblepeer.h"
 
 // TODO: should have a way to disable this on release builds
 #define LOG printf
@@ -51,11 +53,6 @@ struct internal_context_t {
 	internal_callbacks_t callbacks;
 	
 	std::map<std::string,internal_callbacks_t> protocols;
-	
-	std::string turnServer;
-	std::string turnUsername;
-	std::string turnPassword;
-	std::vector<std::string> stunServerList;
 	
 	// websocket
 	struct lws_context *websocket;
@@ -296,7 +293,11 @@ internal_context_t* internal_init(internal_callbacks_t* callbacks) {
 	info.port = CONTEXT_PORT_NO_LISTEN;
 	info.gid = -1;
 	info.uid = -1;
+#ifdef LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT
 	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+#else
+	info.options = 0;
+#endif
 #if 0
 #if defined __APPLE__ || defined(__linux__)
 	// test a few wll known locations
@@ -324,22 +325,26 @@ bool internal_supports_webRTC(internal_context_t* ctx) {
 	return ctx->webrtc != NULL;
 }
 
-void internal_set_stun_servers( internal_context_t* ctx, const char** servers, int count){
-	if( ctx->webrtc )
-		libwebrtc_set_stun_servers( ctx->webrtc, servers, count );
-
-	ctx->stunServerList.clear();
-	for( int i = 0; i < count; ++i ) {
-		ctx->stunServerList.push_back( *servers );
-		servers++;
+void internal_set_ice_servers(internal_context_t* ctx, const humblenet::ICEServer* servers, int count) {
+	if(ctx == NULL || ctx->webrtc == NULL) {
+		return;
 	}
-}
 
-void internal_add_turn_server( internal_context_t* ctx, const char* server, const char* username, const char* password ) {
-	libwebrtc_add_turn_server( ctx->webrtc, server, username, password );
-	ctx->turnServer = server;
-	ctx->turnUsername = username;
-	ctx->turnPassword = password;
+	std::vector<libwebrtc_ice_server> tempServers;
+	tempServers.reserve(count);
+	for(int i = 0; i < count; ++i) {
+		const humblenet::ICEServer& server = servers[i];
+		libwebrtc_ice_server item;
+		item.type = server.type == humblenet::HumblePeer::ICEServerType::TURNServer
+			? LIBWEBRTC_ICE_SERVER_TURN
+			: LIBWEBRTC_ICE_SERVER_STUN;
+		item.url = server.server.c_str();
+		item.username = server.username.c_str();
+		item.password = server.password.c_str();
+		tempServers.push_back(item);
+	}
+
+	libwebrtc_set_ice_servers(ctx->webrtc, tempServers.data(), tempServers.size());
 }
 
 void internal_set_callbacks(internal_socket_t* socket, internal_callbacks_t* callbacks ) {

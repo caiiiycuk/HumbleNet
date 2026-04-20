@@ -86,6 +86,11 @@ public static class HumbleNet {
 		return NativeMethods.humblenet_init();
 	}
 
+	public static bool SetIceServers(string json)
+	{
+		return NativeMethods.humblenet_set_iceservers(json);
+	}
+
 	public static void Shutdown()
 	{
 		NativeMethods.humblenet_shutdown();

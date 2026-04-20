@@ -305,9 +305,12 @@ void help(const std::string& prog, const std::string& error = "")
 	}
 	std::cerr
 		<< "Humblenet peer match-making server\n"
-		<< " " << prog << "[-h] --email em@example.com --common-name test.example.com\n"
-		<< "   --email Used to request SSL certificate from Let's Encrypt\n"
-		<< "   --common-name Domain name Let's Encrypt will ping during ACME and issue certs for\n"
+		<< " " << prog << " [-h] [--email em@example.com --common-name test.example.com]\n"
+		<< "   Starts the HTTP signaling server on port 8080.\n"
+		<< "   If both --email and --common-name are provided, a TLS vhost is also started on port 444.\n"
+		<< "   Certificates must already exist under /etc/letsencrypt/live/net.js-dos.com/.\n"
+		<< "   --email Optional marker required together with --common-name to enable the TLS vhost\n"
+		<< "   --common-name Optional marker required together with --email to enable the TLS vhost\n"
 		<< "   -h     Displays this help\n"
 		<< std::endl;
 }
@@ -322,7 +325,6 @@ void sighandler(int sig)
 int main(int argc, char *argv[]) {
 	char* email = nullptr;
 	char* common_name = nullptr;
-	std::vector<ICEServer> ice_servers;
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		std::string arg  = argv[i];
@@ -345,56 +347,6 @@ int main(int argc, char *argv[]) {
 				help(argv[0], "--common_name option requires an argument");
 				exit(2);
 			}
-		} else if (arg == "--ice-servers") {
-			++i;
-			if (i < argc) {
-				std::ifstream ice_servers_stream(argv[i]);
-
-				if (!ice_servers_stream.is_open()) {
-					printf("file '%s' does not exists\n", argv[i]);
-					abort();
-				}
-
-				std::string line;
-				while (std::getline(ice_servers_stream, line)) {
-					if (line.empty() || line[0] == '#') {
-						continue;
-					}
-
-					std::string url, username, password = "";
-					size_t space_pos = line.find(' ');
-
-					if (space_pos == std::string::npos) {
-						url = line;
-					} else {
-						url = line.substr(0, space_pos);
-						std::string creds = line.substr(space_pos + 1);
-						size_t colon_pos = creds.find(' ');
-						if (colon_pos == std::string::npos) {
-							printf("no password specified in line '%s'\n", line.c_str());
-							abort();
-						} else {
-							username = creds.substr(0, colon_pos);
-							password = creds.substr(colon_pos + 1);
-						}
-					}
-
-
-					if (url.find("stun") == 0) {
-						if (!username.empty() || !password.empty()) {
-							printf("Does not support for stun server with credentials\n");
-							abort();
-						}
-						ice_servers.push_back(ICEServer(url));
-					} else {
-						ice_servers.push_back(ICEServer(url, username, password));
-					}
-				}
-				ice_servers_stream.close();
-			} else {
-				help(argv[0], "--ice-servers option requires an argument");
-				exit(2);
-			}
 		}
 	}
 
@@ -415,7 +367,6 @@ int main(int argc, char *argv[]) {
 	signal(SIGTERM, sighandler);
 
 	peerServer.reset(new Server());
-	peerServer->iceServers = ice_servers;
 
 	struct lws_context_creation_info info;
 	memset(&info, 0, sizeof(info));

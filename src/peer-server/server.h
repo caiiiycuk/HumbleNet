@@ -18,11 +18,9 @@ namespace humblenet {
 		// websocket (for the receive callback) and peer id (when sending stuff)
 		std::unordered_map<struct lws *, std::unique_ptr<P2PSignalConnection> > signalConnections;
 		std::unique_ptr<Catalog> catalog;
-		std::vector<ICEServer> iceServers;
 
 		Server();
 
-		void populateStunServers(std::vector<ICEServer>& servers);
 		void triggerWrite(struct lws* wsi);
 	};
 

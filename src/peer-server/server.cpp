@@ -12,9 +12,4 @@ namespace humblenet {
 	{
 		lws_callback_on_writable(wsi);
 	}
-
-	void Server::populateStunServers(std::vector<ICEServer> &servers)
-	{
-		servers = this->iceServers;
-	}
 }

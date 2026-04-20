@@ -2,6 +2,7 @@
 // Created by caiiiycuk on 25.07.25.
 //
 #include <cstdio>
+#include <cstdlib>
 #include <emscripten.h>
 #include <string.h>
 
@@ -9,7 +10,23 @@
 #include "humblenet_p2p.h"
 #include "humblenet_p2p_internal.h"
 
+EM_JS(char*, getNetConfigIceServersJson, (), {
+    if (!window.netConfig || !window.netConfig.iceServers) {
+        return 0;
+    }
+
+    return stringToNewUTF8(JSON.stringify(window.netConfig.iceServers));
+});
+
 extern "C" bool EMSCRIPTEN_KEEPALIVE connectTo(const char* server, const char* token, const char* secret) {
+    char* iceServersJson = getNetConfigIceServersJson();
+    if (!humblenet_set_iceservers(iceServersJson)) {
+        printf("ERR! Can't configure ICE servers: %s\n", humblenet_get_error());
+        free(iceServersJson);
+        return false;
+    }
+    free(iceServersJson);
+
     if (!humblenet_init()) {
         printf("ERR! Can't initialize humblenet\n");
         return false;

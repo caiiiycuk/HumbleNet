@@ -38,6 +38,12 @@ bool HasIPv6Enabled() {
 
 struct libwebrtc_connection;
 struct libwebrtc_data_channel;
+struct stored_ice_server {
+	libwebrtc_ice_server_type type = LIBWEBRTC_ICE_SERVER_STUN;
+	std::string url;
+	std::string username;
+	std::string password;
+};
 
 class CreateDescriptionObserver;
 
@@ -95,10 +101,7 @@ static std::string ExtractIceUfrag(const std::string& sdp) {
 
 struct libwebrtc_context {
 	lwrtc_callback_function callback = nullptr;
-	std::vector<std::string> stun_servers;
-	std::string turn_server;
-	std::string turn_username;
-	std::string turn_password;
+	std::vector<stored_ice_server> ice_servers;
 
 	std::unique_ptr<rtc::Thread> network_thread;
 	std::unique_ptr<rtc::Thread> worker_thread;
@@ -548,8 +551,11 @@ webrtc::PeerConnectionInterface::RTCConfiguration BuildRtcConfig(const libwebrtc
 	webrtc::PeerConnectionInterface::RTCConfiguration config;
 	config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
 
-	for(const std::string& server : ctx->stun_servers) {
-		const std::string url = NormalizeStunUrl(server);
+	for(const stored_ice_server& server : ctx->ice_servers) {
+		const std::string raw_url = server.url;
+		const std::string url = server.type == LIBWEBRTC_ICE_SERVER_TURN
+			? NormalizeTurnUrl(raw_url)
+			: NormalizeStunUrl(raw_url);
 		if(url.empty()) {
 			continue;
 		}
@@ -557,20 +563,14 @@ webrtc::PeerConnectionInterface::RTCConfiguration BuildRtcConfig(const libwebrtc
 		webrtc::PeerConnectionInterface::IceServer ice_server;
 		ice_server.uri = url;
 		ice_server.urls.push_back(ice_server.uri);
-		config.servers.push_back(ice_server);
-	}
-
-	if(!ctx->turn_server.empty() && !ctx->turn_username.empty() && !ctx->turn_password.empty()) {
-		const std::string url = NormalizeTurnUrl(ctx->turn_server);
-		if(url.empty()) {
-			return config;
+		if(server.type == LIBWEBRTC_ICE_SERVER_TURN) {
+			if(!server.username.empty()) {
+				ice_server.username = server.username;
+			}
+			if(!server.password.empty()) {
+				ice_server.password = server.password;
+			}
 		}
-
-		webrtc::PeerConnectionInterface::IceServer ice_server;
-		ice_server.uri = url;
-		ice_server.urls.push_back(ice_server.uri);
-		ice_server.username = ctx->turn_username;
-		ice_server.password = ctx->turn_password;
 		config.servers.push_back(ice_server);
 	}
 
@@ -653,27 +653,22 @@ WEBRTC_EXPORT void libwebrtc_destroy_context(struct libwebrtc_context* ctx) {
 	delete ctx;
 }
 
-WEBRTC_EXPORT void libwebrtc_set_stun_servers(struct libwebrtc_context* ctx, const char** servers, int count) {
+WEBRTC_EXPORT void libwebrtc_set_ice_servers(struct libwebrtc_context* ctx, const struct libwebrtc_ice_server* servers, int count) {
 	if(!ctx) {
 		return;
 	}
 
-	ctx->stun_servers.clear();
+	ctx->ice_servers.clear();
 	for(int i = 0; i < count; ++i) {
-		if(servers[i]) {
-			ctx->stun_servers.emplace_back(servers[i]);
+		if(servers[i].url) {
+			stored_ice_server server;
+			server.type = servers[i].type;
+			server.url = servers[i].url;
+			server.username = servers[i].username ? servers[i].username : "";
+			server.password = servers[i].password ? servers[i].password : "";
+			ctx->ice_servers.push_back(std::move(server));
 		}
 	}
-}
-
-WEBRTC_EXPORT void libwebrtc_add_turn_server(struct libwebrtc_context* ctx, const char* server, const char* username, const char* password) {
-	if(!ctx) {
-		return;
-	}
-
-	ctx->turn_server = server ? server : "";
-	ctx->turn_username = username ? username : "";
-	ctx->turn_password = password ? password : "";
 }
 
 WEBRTC_EXPORT struct libwebrtc_connection* libwebrtc_create_connection_extended(struct libwebrtc_context* ctx, void* user_data) {

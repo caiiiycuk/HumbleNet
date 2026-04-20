@@ -94,8 +94,7 @@ namespace humblenet {
 							const std::string& authToken, const std::string& reconnectToken,
 							const std::map<std::string, std::string>& attributes);
 	ha_bool sendHelloClient(humblenet::P2PSignalConnection *conn, PeerId peerId,
-							const std::string& reconnectToken,
-							const std::vector<ICEServer>& iceServers);
+							const std::string& reconnectToken);
 
 	// P2P Handling
 	ha_bool sendNoSuchPeer(humblenet::P2PSignalConnection *conn, PeerId peerId);

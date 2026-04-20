@@ -372,36 +372,10 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			LOG("My peer id is %u\n", peer);
 			humbleNetState.myPeerId = peer;
 
-			humbleNetState.iceServers.clear();
-
 			if (hello->iceServers()) {
-				auto iceList = hello->iceServers();
-				for (const auto& it : *iceList) {
-					if (it->type() == HumblePeer::ICEServerType::STUNServer) {
-						humbleNetState.iceServers.emplace_back(it->server()->str());
-					} else if (it->type() == HumblePeer::ICEServerType::TURNServer) {
-						auto username = it->username();
-						auto pass = it->password();
-						if (pass && username) {
-							humbleNetState.iceServers.emplace_back(it->server()->str(), username->str(), pass->str());
-						}
-					}
-				}
+				LOG("Ignoring STUN/TURN credentials provided by the server\n");
 			} else {
 				LOG("No STUN/TURN credentials provided by the server\n");
-			}
-
-			std::vector<const char*> stunServers;
-			for (auto& it : humbleNetState.iceServers) {
-				if (it.type == HumblePeer::ICEServerType::STUNServer) {
-					stunServers.emplace_back(it.server.c_str());
-				}
-			}
-			internal_set_stun_servers(humbleNetState.context, stunServers.data(), stunServers.size());
-			for (auto& it : humbleNetState.iceServers) {
-				if (it.type == HumblePeer::ICEServerType::TURNServer) {
-					internal_add_turn_server( humbleNetState.context, it.server.c_str(), it.username.c_str(), it.password.c_str() );
-				}
 			}
 		}
 			break;
@@ -532,4 +506,3 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 	
 	return true;
 }
-

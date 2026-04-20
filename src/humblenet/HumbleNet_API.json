@@ -110,6 +110,13 @@
 			"returntype": "ha_bool"
 		}
 		,{
+			"functionname": "humblenet_set_iceservers",
+			"returntype": "ha_bool",
+			"params": [
+				{  "paramname": "json", "paramtype": "const char *"}
+			]
+		}
+		,{
 			"functionname": "humblenet_shutdown",
 			"returntype": "void"
 		}

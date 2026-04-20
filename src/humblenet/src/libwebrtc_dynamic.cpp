@@ -10,8 +10,7 @@
 #define INTERFACE( X )  \
 	X( struct libwebrtc_context* ,      libwebrtc_create_context,               ( lwrtc_callback_function cb ),                                         (cb) )                  \
 	X( void,                            libwebrtc_destroy_context,              ( struct libwebrtc_context* ctx),                                       (ctx) )                 \
-	X( void,                            libwebrtc_set_stun_servers,             ( struct libwebrtc_context* ctx, const char** servers, int count),      (ctx, servers, count) ) \
-	X( void,                            libwebrtc_add_turn_server,              ( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password),      (ctx, server, username, password) ) \
+	X( void,                            libwebrtc_set_ice_servers,              ( struct libwebrtc_context* ctx, const struct libwebrtc_ice_server* servers, int count),      (ctx, servers, count) ) \
 	X( struct libwebrtc_connection*,    libwebrtc_create_connection_extended,   ( struct libwebrtc_context* ctx, void* user_data ),                     (ctx, user_data) )      \
 	X( struct libwebrtc_data_channel*,  libwebrtc_create_channel,               ( struct libwebrtc_connection* conn, const char* name ),                (conn,name) )           \
 	X( int,                             libwebrtc_create_offer,                 ( struct libwebrtc_connection* conn),                                   (conn) )                \
@@ -73,7 +72,6 @@
 
 // declare pointers types for all the interface methods.
 INTERFACE( FN_TYPES );
-
 // declare the function table type
 struct fn_table_t {
 	INTERFACE( FN_FIELDS );

@@ -205,16 +205,10 @@ namespace humblenet {
 				this->webRTCsupport = true;
 				this->trickleICE = !(hello->flags() & 0x2);
 
-				// send STUN/TURN server credential if client supports webrtc
-				// ';' separator between server, username and password, like this:
-				// "server;username;password"
-				std::vector<ICEServer> iceServers;
-				peerServer->populateStunServers(iceServers);
-
 				// send hello to client
 				std::string reconnectToken = "";
 	#pragma message ("TODO implement reconnect tokens")
-				sendHelloClient(this, peerId, reconnectToken, iceServers);
+				sendHelloClient(this, peerId, reconnectToken);
 			}
 				break;
 

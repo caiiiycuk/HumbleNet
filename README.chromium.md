@@ -13,6 +13,22 @@ The intended flow is:
 3. `humblenet_test_webrtc.bin.x86_64` runs next to that `libwebrtc.so`.
 4. During startup, the dynamic loader in `src/humblenet/src/libwebrtc_dynamic.cpp` prints `external webrtc implementation loaded`, which confirms that the external backend is being used instead of the microstack fallback.
 
+## Backend Positioning
+
+For Linux, the Chromium backend is the intended production path.
+If Linux WebRTC behavior, ICE handling, or NAT traversal needs to be validated,
+validate it on this backend.
+
+The internal microstack backend is kept only as a fallback and demo stack when
+the external library is unavailable. It is not the production reference path,
+and it does not promise feature parity with the Chromium implementation.
+
+Known scope limitations of the microstack fallback:
+
+- it is intended for fallback/demo use rather than production rollout;
+- behavior may diverge from the Chromium backend;
+- only the first TURN server from a configured ICE server list is currently used.
+
 ## Prerequisites
 
 - Platform: Linux.
@@ -133,7 +149,7 @@ Signs that the external path is active:
 - you can see SDP/ICE logs from `tests/test_webrtc.cpp`, for example `sdp offer:` and `sdp answer:`;
 - the test binary does not print `Could not open 'libwebrtc.so'`.
 
-If `libwebrtc.so` is missing or fails to load, the code in [`src/humblenet/src/libwebrtc_dynamic.cpp`](/home/caiiiycuk/js-dos/HumbleNet/src/humblenet/src/libwebrtc_dynamic.cpp) falls back to the internal microstack implementation. In that case, the external Chromium path has not been validated.
+If `libwebrtc.so` is missing or fails to load, the code in [`src/humblenet/src/libwebrtc_dynamic.cpp`](/home/caiiiycuk/js-dos/HumbleNet/src/humblenet/src/libwebrtc_dynamic.cpp) falls back to the internal microstack implementation. In that case, the external Chromium path has not been validated, and the result should not be used as production validation for Linux networking behavior.
 
 ## What Counts As A Successful Check
 

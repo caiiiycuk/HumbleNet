@@ -94,7 +94,7 @@ typedef struct HumbleNetState {
 	std::string gameSecret;
 	std::string authToken;
 	std::string reconnectToken;
-	std::vector<humblenet::ICEServer> iceServers;
+	std::vector<humblenet::ICEServer> configuredIceServers;
 
 	ha_bool webRTCSupported;
 
