@@ -7,7 +7,6 @@
 #include "server.h"
 
 #include "humblenet_utils.h"
-#include "./db.h"
 
 
 namespace humblenet {
@@ -261,7 +260,6 @@ namespace humblenet {
 				} else {
 					if( existing == catalog->aliases.end() ) {
 						catalog->aliases.insert( std::make_pair( alias->c_str(), peerId ) );
-						db::get()->aliasAdded(alias->c_str(), peerId);
 					}
 					LOG_INFO("Registering alias '%s' to peer %u\n", alias->c_str(), peerId );
 	#pragma message ("TODO implement registration success")
@@ -278,7 +276,6 @@ namespace humblenet {
 					auto existing = catalog->aliases.find( alias->c_str() );
 
 					if( existing != catalog->aliases.end() && existing->second == peerId ) {
-						db::get()->aliasRemoved(alias->c_str(), existing->second);
 						catalog->aliases.erase( existing );
 
 						LOG_INFO("Unregistring alias '%s' for peer %u\n", alias->c_str(), peerId );
@@ -290,7 +287,6 @@ namespace humblenet {
 				} else {
 					for( auto it = catalog->aliases.begin(); it != catalog->aliases.end(); ) {
 						if( it->second == peerId ) {
-							db::get()->aliasRemoved(it->first.c_str(), it->second);
 							catalog->aliases.erase( it++ );
 						} else {
 							++it;
