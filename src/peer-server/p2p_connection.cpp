@@ -225,27 +225,6 @@ namespace humblenet {
 				LOG_INFO("P2PDisconnect from peer %u\n", peerId);
 				break;
 
-			case HumblePeer::MessageType::P2PRelayData:
-			{
-				auto relay = reinterpret_cast<const HumblePeer::P2PRelayData*>(msg->message());
-				auto peer = relay->peerId();
-				auto data = relay->data();
-
-				LOG_INFO("P2PRelayData relaying %d bytes from peer %u to %u\n", data->Length(), this->peerId, peer );
-
-				auto it = catalog->peers.find(peer);
-
-				if (it == catalog->peers.end()) {
-					LOG_WARNING(", no such peer\n");
-					sendNoSuchPeer(this, peer);
-				} else {
-					P2PSignalConnection *otherPeer = it->second;
-					assert(otherPeer != NULL);
-					sendP2PRelayData(otherPeer, this->peerId, data->Data(), data->Length() );
-				}
-			}
-				break;
-
 				// Alias processing
 			case HumblePeer::MessageType::AliasRegister:
 			{

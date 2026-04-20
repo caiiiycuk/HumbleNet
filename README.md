@@ -82,9 +82,8 @@ window.netConfig = {
 
 Native clients must provide their own ICE server list with
 `humblenet_set_iceservers()` before establishing WebRTC/P2P connections.
-`peer-server` no longer sends ICE servers to native clients through
-`HelloClient`, so STUN/TURN configuration now has to be supplied by the
-application.
+`peer-server` is used for peer matching and signaling only, so STUN/TURN
+configuration must be supplied by the application.
 
 For Linux production deployments, the intended backend is the external
 Chromium WebRTC implementation documented in [README.chromium.md](/home/caiiiycuk/js-dos/HumbleNet/README.chromium.md).

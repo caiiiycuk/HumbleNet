@@ -330,14 +330,6 @@ int humblenet_connection_write(Connection *connection, const void *buf, uint32_t
 
 		case HUMBLENET_CONNECTION_CONNECTED:
 			assert(connection->socket != NULL);
-
-			const char* use_relay = humblenet_get_hint("p2p_use_relay");
-			if( use_relay && *use_relay == '1' ) {
-				if( ! sendP2PRelayData( humbleNetState.p2pConn.get(), connection->otherPeer, buf, bufsize ) ) {
-					return -1;
-				}
-				return bufsize;
-			}
 		{
 			HUMBLENET_UNGUARD();
 			return internal_write_socket( connection->socket, buf, bufsize );

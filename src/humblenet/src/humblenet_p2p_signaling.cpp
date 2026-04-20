@@ -371,12 +371,6 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			}
 			LOG("My peer id is %u\n", peer);
 			humbleNetState.myPeerId = peer;
-
-			if (hello->iceServers()) {
-				LOG("Ignoring STUN/TURN credentials provided by the server\n");
-			} else {
-				LOG("No STUN/TURN credentials provided by the server\n");
-			}
 		}
 			break;
 
@@ -452,32 +446,6 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 		}
 			break;
 			
-		case HumblePeer::MessageType::P2PRelayData:
-		{
-			auto relay = reinterpret_cast<const HumblePeer::P2PRelayData*>(msg->message());
-			auto peer = relay->peerId();
-			auto data = relay->data();
-			
-			LOG("Got %d bytes relayed from peer %u\n", data->size(), peer );
-
-			// Sequentially look for the other peer
-			auto it = humbleNetState.connections.begin();
-			for( ; it != humbleNetState.connections.end(); ++it ) {
-				if( it->second->otherPeer == peer )
-					break;
-			}
-			if( it == humbleNetState.connections.end() ) {
-				LOG("Peer %u does not exist\n", peer);
-			} else {
-				Connection* conn = it->second;
-				
-				conn->recvBuffer.emplace_back(data->begin(), data->end());
-				humbleNetState.pendingDataConnections.insert( conn );
-				
-				signal();
-			}
-		}
-			break;
 		case HumblePeer::MessageType::AliasResolved:
 		{
 			auto resolved = reinterpret_cast<const HumblePeer::AliasResolved*>(msg->message());

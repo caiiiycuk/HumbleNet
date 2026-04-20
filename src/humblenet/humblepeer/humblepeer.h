@@ -103,7 +103,6 @@ namespace humblenet {
 	ha_bool sendP2PResponse(P2PSignalConnection *conn, PeerId peerId, const char* offer);
 	ha_bool sendICECandidate(humblenet::P2PSignalConnection *conn, PeerId peerId, const char* offer);
 	ha_bool sendP2PDisconnect(humblenet::P2PSignalConnection *conn, PeerId peer);
-	ha_bool sendP2PRelayData(humblenet::P2PSignalConnection *conn, PeerId peer, const void* data, uint16_t length);
 
 	// Name Alias
 	ha_bool sendAliasRegister(P2PSignalConnection *conn, const std::string& alias);

@@ -6,15 +6,6 @@ table Attribute {
 	value:string (required);
 }
 
-enum ICEServerType : ubyte { STUNServer = 1, TURNServer = 2}
-
-table ICEServer {
-	type			: ICEServerType = STUNServer;
-	server			:string (required);
-	username		:string;
-	password		:string;
-}
-
 // Message tables
 
 // Hello
@@ -31,7 +22,6 @@ table HelloServer {
 table HelloClient {
 	peerId			: uint;
 	reconnectToken	: string;
-	iceServers		: [ICEServer];
 }
 
 // P2P Handshaking
@@ -65,11 +55,6 @@ table P2PReject {
 table ICECandidate {
 	peerId			: uint;
 	offer			: string;
-}
-
-table P2PRelayData {
-	peerId			: uint;
-	data			: [byte];
 }
 
 // Name alias handling
@@ -110,7 +95,7 @@ union MessageType {
 	// Main peer-server connection (1 -> 9)
 	HelloServer, HelloClient,
 	// P2P Negotiation specific messages (10 -> 19)
-	P2PConnected = 10, P2PDisconnect, P2POffer, P2PAnswer, P2PReject, ICECandidate, P2PRelayData,
+	P2PConnected = 10, P2PDisconnect, P2POffer, P2PAnswer, P2PReject, ICECandidate,
 	// Name Alias system (20 -> 29)
 	AliasRegister = 20, AliasUnregister, AliasLookup, AliasResolved, AliasQuery, AliasQueryResult
 }

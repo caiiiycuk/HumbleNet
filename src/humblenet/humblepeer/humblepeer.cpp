@@ -219,15 +219,6 @@ namespace humblenet {
 
 	}
 
-	ha_bool sendP2PRelayData(humblenet::P2PSignalConnection *conn, PeerId peerId, const void* data, uint16_t length) {
-		flatbuffers::FlatBufferBuilder fbb(DEFAULT_FBB_SIZE);
-		auto packet = HumblePeer::CreateP2PRelayData(fbb, peerId, fbb.CreateVector((int8_t*)data, length));
-		auto msg = HumblePeer::CreateMessage(fbb, HumblePeer::MessageType::P2PRelayData, packet.Union());
-		fbb.Finish(msg);
-
-		return sendP2PMessage(conn, fbb);
-	}
-
 	// ** Name Alias messages
 
 	ha_bool sendAliasRegister(P2PSignalConnection *conn, const std::string& alias)
