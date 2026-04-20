@@ -65,8 +65,6 @@ static bool lookup_peer(const std::string& hostname) {
 		for (auto &game : peerServer->catalog->aliases) {
 			aliases += game.first + ", ";
 		}
-
-		LOG_INFO("lookup_peer: could not find host %s in (%s)\n", hostname.c_str(), aliases.c_str());
 	}
 
 	return found;
