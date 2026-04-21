@@ -56,7 +56,7 @@
 	HUMBLENET_VERSIONNUM(HUMBLENET_MAJOR_VERSION, HUMBLENET_MINOR_VERSION, HUMBLENET_PATCHLEVEL)
 
 /**
- * check if compiled with HumbleNet version of at least X.Y.Z
+ * check if compiled with WebRTC-NET version of at least X.Y.Z
  */
 #define HUMBLENET_VERSION_ATLEAST(X, Y, Z) \
 	(HUMBLENET_COMPILEDVERSION >= HUMBLENET_VERSIONNUM(X, Y, Z))
@@ -69,12 +69,12 @@ typedef uint8_t ha_bool;
 typedef uint32_t PeerId;
 
 /*
- * Get the version of the humblenet library we are linked to
+ * Get the version of the WebRTC-NET library we are linked to
  */
 HUMBLENET_API uint32_t HUMBLENET_CALL humblenet_version();
 
 /*
- * Initialize the core humblenet library
+ * Initialize the core WebRTC-NET library
  */
 HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_init();
 
@@ -87,7 +87,7 @@ HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_init();
 HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_set_iceservers(const char* json);
 
 /*
- * Shutdown the entire humblenet library
+ * Shutdown the entire WebRTC-NET library
  */
 HUMBLENET_API void HUMBLENET_CALL humblenet_shutdown();
 

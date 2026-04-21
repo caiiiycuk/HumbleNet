@@ -1,4 +1,4 @@
-name: humblenet-openssl-linux
+name: WebRTC-NET OpenSSL Linux
 
 on:
   push:
@@ -79,7 +79,7 @@ jobs:
         test -f ${{github.workspace}}/build-jsapi/jsapi.mjs
         test -f ${{github.workspace}}/build-jsapi/jsapi.wasm
 
-    - name: Upload humblenet bundle
+    - name: Upload WebRTC-NET bundle
       uses: actions/upload-artifact@v4
       with:
         name: humblenet-openssl-linux

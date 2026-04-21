@@ -28,12 +28,12 @@ extern "C" bool EMSCRIPTEN_KEEPALIVE connectTo(const char* server, const char* t
     free(iceServersJson);
 
     if (!humblenet_init()) {
-        printf("ERR! Can't initialize humblenet\n");
+        printf("ERR! Can't initialize WebRTC-NET\n");
         return false;
     }
 
     if (!humblenet_p2p_init(server, token, secret, NULL)) {
-        printf("ERR! Can't initialize humblenet\n");
+        printf("ERR! Can't initialize WebRTC-NET\n");
         return false;
     }
 

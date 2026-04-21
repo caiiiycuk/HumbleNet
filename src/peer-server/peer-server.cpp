@@ -302,7 +302,7 @@ void help(const std::string& prog, const std::string& error = "")
 		std::cerr << "Error: " << error << "\n\n";
 	}
 	std::cerr
-		<< "Humblenet peer match-making server\n"
+		<< "WebRTC-NET peer match-making server\n"
 		<< " " << prog << " [-h|--help] [--tls --tls-cert <path> --tls-key <path>]\n"
 		<< "   Starts the HTTP signaling server on port 8080.\n"
 		<< "   If --tls is provided, a TLS vhost is also started on port 444.\n"

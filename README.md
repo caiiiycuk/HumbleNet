@@ -1,26 +1,26 @@
-HumbleNet
-=========
+WebRTC-NET
+==========
 
-[![humblenet-linux](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml/badge.svg)](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml)
+[![WebRTC-NET Linux](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml/badge.svg)](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml)
 
-HumbleNet is a cross platform networking library that utilizes WebRTC and WebSockets to handle network communication.
+WebRTC-NET is a cross platform networking library that utilizes WebRTC and WebSockets to handle network communication.
 
-Using WebRTC and Websockets allows HumbleNet to support not only traditional platforms such as Windows, OS X, and Linux, but also web platforms such as ASM.JS / Emscripten.
+Using WebRTC and Websockets allows WebRTC-NET to support not only traditional platforms such as Windows, OS X, and Linux, but also web platforms such as ASM.JS / Emscripten.
 
 Language Support
 ----------------
-HumbleNet is a simple clean C based API that allows for wrappers to be written for any language that offers C binding.
+WebRTC-NET is a simple clean C based API that allows for wrappers to be written for any language that offers C binding.
 
 Included Language Bindings
 ==========================
 * C/C++
-  - a simple C header is available for both C and C++ development.  There is also a BSD socket wrapper that will redirect the C socket API through humblenet.
+  - a simple C header is available for both C and C++ development.  There is also a BSD socket wrapper that will redirect the C socket API through WebRTC-NET.
 * C#
   - wrappers are included that work in Unity for its Desktop and WebGL platform support. They should also work in any other .NET application.
 
 Demo applications
 =================
-We have several demos to show off integrating HumbleNet.
+We have several demos to show off integrating WebRTC-NET.
 
 TestPeer
 --------
@@ -28,15 +28,15 @@ This is a simple "chat" app in the tests folder for both C and C#.   The C app w
 
 Quake 2
 -------
-We have a port of Quake2 (Based on [R1Q2](http://www.r1ch.net/stuff/r1q2/)) that includes HumbleNet networking and runs on Windows, Mac OS X, Linux and Emscripten.
+We have a port of Quake2 (Based on [R1Q2](http://www.r1ch.net/stuff/r1q2/)) that includes WebRTC-NET networking and runs on Windows, Mac OS X, Linux and Emscripten.
 
-[Quake 2 HumbleNet port](https://github.com/HumbleNet/quake2)
+[Quake 2 WebRTC-NET port](https://github.com/HumbleNet/quake2)
 
 Quake 3
 -------
-We have a port of Quake3 (Based on [QuakeJS](http://quakejs.com/)) that includes HumbleNet networking and runs on Windows, Mac OS X, Linux and Emscripten.
+We have a port of Quake3 (Based on [QuakeJS](http://quakejs.com/)) that includes WebRTC-NET networking and runs on Windows, Mac OS X, Linux and Emscripten.
 
-[Quake 3 HumbleNet port](https://github.com/HumbleNet/quake3)
+[Quake 3 WebRTC-NET port](https://github.com/HumbleNet/quake3)
 
 Build Instructions
 ==================
@@ -52,7 +52,7 @@ Project Dependencies:
     - Unix: already installed.
     - Win: you can use Cygwin.
 3. FlatBuffers (https://google.github.io/flatbuffers/index.html)
-    - Download the source code. The HumbleNet is way behind the current version of FlatBuffers. It's using the version 1.6.0 (currently 1.7.1).
+    - Download the source code. WebRTC-NET is way behind the current version of FlatBuffers. It's using the version 1.6.0 (currently 1.7.1).
         1. You can download/clone the repo, and revert the master to commit `81ecc98e023f85fe003a27e920e78b34db8a0087` [here](https://github.com/google/flatbuffers/commit/81ecc98e023f85fe003a27e920e78b34db8a0087#diff-e644a513ebf0d4b999ed39c245f8f3db).
         2. Or download the Release [here](https://github.com/google/flatbuffers/releases/tag/v1.6.0). This should work (not tested).
     - Follow the instructions here (https://google.github.io/flatbuffers/flatbuffers_guide_building.html);

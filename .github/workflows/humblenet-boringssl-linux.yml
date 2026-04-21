@@ -1,4 +1,4 @@
-name: humblenet-boringssl-linux
+name: WebRTC-NET BoringSSL Linux
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
         test -f ${{github.workspace}}/build/libhumblenet.so
         test -f ${{github.workspace}}/build/libhumblenet_static.a
 
-    - name: Upload humblenet bundle
+    - name: Upload WebRTC-NET bundle
       uses: actions/upload-artifact@v4
       with:
         name: humblenet-boringssl-linux

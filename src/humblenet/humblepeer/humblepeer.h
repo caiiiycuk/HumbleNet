@@ -1,7 +1,7 @@
 #ifndef HUMBLEPEER_H
 #define HUMBLEPEER_H
 
-// HumbleNet internal, do not include
+// WebRTC-NET internal, do not include
 
 #include <string>
 #include <unordered_map>

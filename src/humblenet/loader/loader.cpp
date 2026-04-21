@@ -3,7 +3,7 @@
 
 #include <string>
 
-// globally exclude this as we won't be using the one in the loaded humblenet (it is blank anyway)
+// globally exclude this as we won't be using the one in the loaded WebRTC-NET library (it is blank anyway)
 #define HUMBLENET_SKIP_humblenet_loader_init
 
 extern "C" {

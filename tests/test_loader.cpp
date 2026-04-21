@@ -6,25 +6,25 @@
 
 int main(int argc, char* argv[])
 {
-	debug_out("Initializing HumbleNet");
+	debug_out("Initializing WebRTC-NET");
 	if (!humblenet_init()) {
-		debug_out("HumbleNet init failed : " << humblenet_get_error());
+		debug_out("WebRTC-NET init failed : " << humblenet_get_error());
 		return 1;
 	}
 	const char* err = humblenet_get_error();
-	debug_out("HumbleNet Init Success");
+	debug_out("WebRTC-NET Init Success");
 	humblenet_shutdown();
-	debug_out("HumbleNet shutdown");
+	debug_out("WebRTC-NET shutdown");
 
-	debug_out("Initializing HumbleNet (Round 2)");
+	debug_out("Initializing WebRTC-NET (Round 2)");
 	if (!humblenet_init()) {
-		debug_out("HumbleNet init failed : " << humblenet_get_error());
+		debug_out("WebRTC-NET init failed : " << humblenet_get_error());
 		return 1;
 	}
 	err = humblenet_get_error();
-	debug_out("HumbleNet Init Success");
+	debug_out("WebRTC-NET Init Success");
 	humblenet_shutdown();
-	debug_out("HumbleNet shutdown");
+	debug_out("WebRTC-NET shutdown");
 
 	return 0;
 }

@@ -1,6 +1,6 @@
 # Chromium WebRTC Build Notes
 
-This document explains how to build HumbleNet with the external Chromium-based `libwebrtc` backend and how to verify that this path is actually being used.
+This document explains how to build WebRTC-NET with the external Chromium-based `libwebrtc` backend and how to verify that this path is actually being used.
 
 Important: in this repository, "chromium-webrtc" means the Linux path through the external provider in `3rdparty/webrtc-native-build`. The old in-tree Chromium integration has been removed and is no longer part of the build.
 
@@ -9,7 +9,7 @@ Important: in this repository, "chromium-webrtc" means the Linux path through th
 The intended flow is:
 
 1. `3rdparty/webrtc-native-build` builds and installs upstream Chromium WebRTC artifacts into `dist/<BuildType>/webrtc-native-build-<version>/`.
-2. The main HumbleNet project builds its own adapter `libwebrtc.so` from `src/humblenet/webrtc/webrtc_native_linux.cpp`.
+2. The main WebRTC-NET project builds its own adapter `libwebrtc.so` from `src/humblenet/webrtc/webrtc_native_linux.cpp`.
 3. `humblenet_test_webrtc.bin.x86_64` runs next to that `libwebrtc.so`.
 4. During startup, the dynamic loader in `src/humblenet/src/libwebrtc_dynamic.cpp` prints `external webrtc implementation loaded`, which confirms that the external backend is being used instead of the microstack fallback.
 

@@ -4,7 +4,7 @@ This document is the single source of truth for the remaining work on the Linux 
 
 ## Goal
 
-Finish the Linux external WebRTC integration so that HumbleNet:
+Finish the Linux external WebRTC integration so that WebRTC-NET:
 
 - loads external `libwebrtc.so`;
 - passes `tests/test_webrtc.cpp` with the external backend;
@@ -34,7 +34,7 @@ Observed runtime state:
 
 ### 2. Callback And Lifecycle Validation
 
-Validate the HumbleNet callback contract from `src/humblenet/src/libwebrtc.h`, especially:
+Validate the WebRTC-NET callback contract from `src/humblenet/src/libwebrtc.h`, especially:
 
 - local description;
 - ICE candidate delivery;
@@ -88,7 +88,7 @@ Special attention is still required for:
 
 ### 7. Provider Follow-Up
 
-- if remaining issues are provider-owned, patch `3rdparty/webrtc-native-build` in the fork rather than adding HumbleNet-specific hacks;
+- if remaining issues are provider-owned, patch `3rdparty/webrtc-native-build` in the fork rather than adding WebRTC-NET-specific hacks;
 - update the pinned provider submodule revision intentionally if provider fixes are required.
 
 ### 8. CI

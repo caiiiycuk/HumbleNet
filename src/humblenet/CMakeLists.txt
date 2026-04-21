@@ -92,7 +92,7 @@ CreateLibrary(humblepeer
 			crc
 			sha1
 	PROPERTIES
-		FOLDER HumbleNet/Library
+		FOLDER WebRTC-NET/Library
 	DEPENDS
 		"${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
 	)
@@ -125,7 +125,7 @@ set(CORE_HUMBLENET
 		${PLATFORM_LIBRARIES}
 		$<$<BOOL:${DL_LIBRARY}>:${DL_LIBRARY}>
 	PROPERTIES
-		FOLDER HumbleNet/Library
+		FOLDER WebRTC-NET/Library
 )
 
 set(CORE_HUMBLENET_LOADER
@@ -148,7 +148,7 @@ set(CORE_HUMBLENET_LOADER
 	LINK
 		$<$<BOOL:${DL_LIBRARY}>:${DL_LIBRARY}>
 	PROPERTIES
-		FOLDER HumbleNet/Library
+		FOLDER WebRTC-NET/Library
 )
 
 CreateLibrary(humblenet
@@ -177,11 +177,11 @@ if(HUMBLENET_DESKTOP)
 		BYPRODUCTS ${amalgam_output}
 		SOURCES humblenet_asmjs_amalgam_template.cpp
 
-		COMMENT "Building source amalgamation for emscripten humblenet"
+		COMMENT "Building source amalgamation for Emscripten WebRTC-NET"
 	)
 	set_target_properties(humblenet_asmjs_amalgamation
 		PROPERTIES
-			FOLDER "HumbleNet/Library"
+			FOLDER "WebRTC-NET/Library"
 	)
 
 	add_custom_command(OUTPUT humblenet_loader_procs.h
@@ -201,7 +201,7 @@ if(HUMBLENET_DESKTOP)
 	)
 	set_target_properties(humblenet_cs
 		PROPERTIES
-			FOLDER "HumbleNet/Library"
+			FOLDER "WebRTC-NET/Library"
 	)
 
 	CreateModule(humblenet_unity_editor
@@ -265,7 +265,7 @@ if(NOT EMSCRIPTEN)
 			${HUMBLENET_WEBRTC_SHARED_FEATURES}
 		PROPERTIES
 			OUTPUT_NAME webrtc
-			FOLDER HumbleNet/Library
+			FOLDER WebRTC-NET/Library
 			LINK
 				${HUMBLENET_WEBRTC_SHARED_LINK_TARGET}
 				${WEBRTC_PLATFORM_EXPORT}

@@ -27,7 +27,7 @@ LINK
 	${CAP_LIB}
 	-g
 PROPERTIES
-	FOLDER HumbleNet/Tests
+	FOLDER WebRTC-NET/Tests
 )
 
 list(APPEND TEST_TARGETS
@@ -50,7 +50,7 @@ if(HUMBLENET_DESKTOP)
 		${CAP_LIB}
 		-g
 	PROPERTIES
-		FOLDER HumbleNet/Tests
+		FOLDER WebRTC-NET/Tests
 	)
 	list(APPEND TEST_TARGETS
 		humblenet_test_webrtc
@@ -62,7 +62,7 @@ if(HUMBLENET_DESKTOP)
 	LINK
 		humblenet_loader
 	PROPERTIES
-		FOLDER HumbleNet/Tests
+		FOLDER WebRTC-NET/Tests
 	)
 	list(APPEND TEST_TARGETS
 		humblenet_test_loader
@@ -83,7 +83,7 @@ LINK
 	-g
 	${CAP_LIB}
 PROPERTIES
-	FOLDER HumbleNet/Tests
+	FOLDER WebRTC-NET/Tests
 )
 list(APPEND TEST_TARGETS
 	humblenet_hello_world
@@ -91,6 +91,6 @@ list(APPEND TEST_TARGETS
 
 if(TEST_TARGETS)
 	add_custom_target(all_tests)
-	set_target_properties(all_tests PROPERTIES FOLDER HumbleNet/Tests)
+	set_target_properties(all_tests PROPERTIES FOLDER WebRTC-NET/Tests)
 	add_dependencies(all_tests ${TEST_TARGETS})
 endif()

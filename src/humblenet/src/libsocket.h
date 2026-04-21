@@ -1,6 +1,6 @@
 //
 //  libsocket.h
-//  humblenet
+//  WebRTC-NET
 //
 //  Created by Chris Rudd on 3/11/16.
 //

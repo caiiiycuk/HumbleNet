@@ -1,4 +1,4 @@
-# Contributing to HumbleNet
+# Contributing to WebRTC-NET
 
 1) be sure to read out [TODO.md](TODO.md) to see what features / issues are known.
 2) make your branch based against master
