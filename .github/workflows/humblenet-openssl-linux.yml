@@ -8,6 +8,7 @@ on:
 
 env:
   BUILD_TYPE: Release
+  EMSCRIPTEN_VERSION: 5.0.2
 
 jobs:
   build:
@@ -48,12 +49,31 @@ jobs:
     - name: Build humblenet_asmjs_amalgamation
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target humblenet_asmjs_amalgamation
 
+    - name: Install emsdk
+      run: |
+        git clone https://github.com/emscripten-core/emsdk.git "${{ runner.temp }}/emsdk"
+        "${{ runner.temp }}/emsdk/emsdk" install "${{ env.EMSCRIPTEN_VERSION }}"
+        "${{ runner.temp }}/emsdk/emsdk" activate "${{ env.EMSCRIPTEN_VERSION }}"
+        echo "${{ runner.temp }}/emsdk" >> "$GITHUB_PATH"
+        echo "${{ runner.temp }}/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+        echo "EMSDK=${{ runner.temp }}/emsdk" >> "$GITHUB_ENV"
+        echo "EM_CONFIG=${{ runner.temp }}/emsdk/.emscripten" >> "$GITHUB_ENV"
+        echo "EM_CACHE=${{ runner.temp }}/emscripten-cache" >> "$GITHUB_ENV"
+
+    - name: Configure jsapi
+      run: emcmake cmake -S . -B ${{github.workspace}}/build-jsapi -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build jsapi
+      run: ninja -C ${{github.workspace}}/build-jsapi -j32 jsapi
+
     - name: Verify release artifacts
       run: |
         test -f ${{github.workspace}}/build/libwebrtc.so
         test -f ${{github.workspace}}/build/peer-server.bin.x86_64
         test -f ${{github.workspace}}/build/libhumblenet.so
         test -f ${{github.workspace}}/build/libhumblenet_static.a
+        test -f ${{github.workspace}}/build-jsapi/jsapi.mjs
+        test -f ${{github.workspace}}/build-jsapi/jsapi.wasm
 
     - name: Upload humblenet bundle
       uses: actions/upload-artifact@v4
@@ -64,3 +84,5 @@ jobs:
           build/peer-server.bin.x86_64
           build/libhumblenet.so
           build/libhumblenet_static.a
+          build-jsapi/jsapi.mjs
+          build-jsapi/jsapi.wasm
