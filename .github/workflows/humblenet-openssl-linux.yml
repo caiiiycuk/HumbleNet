@@ -3,8 +3,12 @@ name: humblenet-openssl-linux
 on:
   push:
     branches: [ "master" ]
+    tags: [ "*" ]
   pull_request:
     branches: [ "master" ]
+
+permissions:
+  contents: write
 
 env:
   BUILD_TYPE: Release
@@ -80,6 +84,18 @@ jobs:
       with:
         name: humblenet-openssl-linux
         path: |
+          build/libwebrtc.so
+          build/peer-server.bin.x86_64
+          build/libhumblenet.so
+          build/libhumblenet_static.a
+          build-jsapi/jsapi.mjs
+          build-jsapi/jsapi.wasm
+
+    - name: Create GitHub release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
           build/libwebrtc.so
           build/peer-server.bin.x86_64
           build/libhumblenet.so
