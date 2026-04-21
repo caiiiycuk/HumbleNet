@@ -20,16 +20,21 @@
 namespace humblenet {
 
 	// Ice Server definition
+	enum class ICEServerType {
+		STUNServer,
+		TURNServer
+	};
+
 	struct ICEServer {
-		HumblePeer::ICEServerType type;
+		ICEServerType type;
 		std::string server;
 		std::string username;
 		std::string password;
 
 		ICEServer(const std::string& _server)
-		: type(HumblePeer::ICEServerType::STUNServer), server(_server) {}
+		: type(ICEServerType::STUNServer), server(_server) {}
 		ICEServer(const std::string& _server, const std::string& _username, const std::string& _password)
-		: type(HumblePeer::ICEServerType::TURNServer), server(_server), username(_username), password(_password) {}
+		: type(ICEServerType::TURNServer), server(_server), username(_username), password(_password) {}
 	};
 
 	// abstract type for P2P signaling connection

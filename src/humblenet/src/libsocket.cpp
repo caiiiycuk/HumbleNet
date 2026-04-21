@@ -335,7 +335,7 @@ void internal_set_ice_servers(internal_context_t* ctx, const humblenet::ICEServe
 	for(int i = 0; i < count; ++i) {
 		const humblenet::ICEServer& server = servers[i];
 		libwebrtc_ice_server item;
-		item.type = server.type == humblenet::HumblePeer::ICEServerType::TURNServer
+		item.type = server.type == humblenet::ICEServerType::TURNServer
 			? LIBWEBRTC_ICE_SERVER_TURN
 			: LIBWEBRTC_ICE_SERVER_STUN;
 		item.url = server.server.c_str();
