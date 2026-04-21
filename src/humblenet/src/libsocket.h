@@ -1,6 +1,6 @@
 //
 //  libsocket.h
-//  humblenet
+//  WebRTC-NET
 //
 //  Created by Chris Rudd on 3/11/16.
 //
@@ -47,8 +47,6 @@ bool internal_supports_webRTC( internal_context_t *);
 void internal_register_protocol( internal_context_t*, const char* protocol, internal_callbacks_t* callbacks );
     
 internal_socket_t* internal_connect_websocket( const char* addr, const char* protocol );
-void internal_set_stun_servers( internal_context_t*, const char** servers, int count);
-void internal_add_turn_server( internal_context_t*, const char* server, const char* username, const char* password);
 internal_socket_t* internal_create_webrtc(internal_context_t *);
 int internal_create_offer( internal_socket_t* socket );
 int internal_set_offer( internal_socket_t* socket, const char* offer );
@@ -63,6 +61,12 @@ void internal_close_socket( internal_socket_t* );
     
 #ifdef __cplusplus
 }
+
+namespace humblenet {
+	struct ICEServer;
+}
+
+void internal_set_ice_servers(internal_context_t*, const humblenet::ICEServer* servers, int count);
 #endif
 
 #endif /* LIBSOCKET_H */

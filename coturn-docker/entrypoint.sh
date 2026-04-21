@@ -16,10 +16,13 @@ fi
 
 export PUBLIC_IP TURN_SECRET
 export RELAY_PORT_MIN="${RELAY_PORT_MIN:-49152}"
-export RELAY_PORT_MAX="${RELAY_PORT_MAX:-49252}"
+export RELAY_PORT_MAX="${RELAY_PORT_MAX:-65535}"
+export TOTAL_QUOTA="${TOTAL_QUOTA:-600}"
+export USER_QUOTA="${USER_QUOTA:-600}"
 
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 CONF="/etc/turnserver.conf"
+COTURN_RESTART_EXPECTED="/var/lib/coturn/restart-expected"
 
 generate_config() {
     envsubst < /etc/turnserver.conf.template > "$CONF"
@@ -31,6 +34,13 @@ generate_config() {
     fi
 }
 
+TURNSERVER_PID=""
+
+start_turnserver() {
+    turnserver -c "$CONF" --pidfile /var/run/turnserver.pid -v &
+    TURNSERVER_PID=$!
+}
+
 # Watch for cert renewal (certbot deploy-hook touches this file)
 watch_certs() {
     while true; do
@@ -39,9 +49,8 @@ watch_certs() {
         rm -f /etc/letsencrypt/renewed
         echo "Certificate renewed — restarting turnserver..."
         generate_config
+        touch "$COTURN_RESTART_EXPECTED"
         kill -TERM "$(cat /var/run/turnserver.pid 2>/dev/null)" 2>/dev/null || true
-        wait 2>/dev/null || true
-        turnserver -c "$CONF" --pidfile /var/run/turnserver.pid -v &
     done
 }
 
@@ -52,9 +61,11 @@ PROMETHEUS_URL="http://localhost:9641/metrics"
 
 get_total_bytes() {
     local metrics rcvb sentb
-    metrics=$(curl -s --connect-timeout 2 --max-time 5 "$PROMETHEUS_URL" 2>/dev/null) || { echo 0; return; }
-    rcvb=$(echo "$metrics" | awk '/^turn_total_traffic_rcvb /{printf "%.0f", $2}')
-    sentb=$(echo "$metrics" | awk '/^turn_total_traffic_sentb /{printf "%.0f", $2}')
+    metrics=$(curl -fsS --connect-timeout 2 --max-time 5 "$PROMETHEUS_URL" 2>/dev/null) || return 1
+    echo "$metrics" | grep -qE '^turn_total_traffic_rcvb ' || return 1
+    echo "$metrics" | grep -qE '^turn_total_traffic_sentb ' || return 1
+    rcvb=$(echo "$metrics" | awk '/^turn_total_traffic_rcvb /{printf "%.0f", $2; exit}')
+    sentb=$(echo "$metrics" | awk '/^turn_total_traffic_sentb /{printf "%.0f", $2; exit}')
     echo $(( ${rcvb:-0} + ${sentb:-0} ))
 }
 
@@ -77,7 +88,10 @@ EOL
 
 update_traffic() {
     local total_now today this_month delta
-    total_now=$(get_total_bytes)
+    if ! total_now=$(get_total_bytes); then
+        echo "traffic-metrics: scrape failed or invalid, skipping update" >&2
+        return
+    fi
     total_now=${total_now:-0}
     today=$(date +%Y-%m-%d)
     this_month=$(date +%Y-%m)
@@ -105,15 +119,17 @@ publish_ice() {
     load_stats
     while true; do
         update_traffic
-        local ts=$(($(date +%s) + ttl)):master
-        local cred
-        cred=$(printf '%s' "$ts" | openssl dgst -sha1 -hmac "$TURN_SECRET" -binary | base64)
+        local now expires username cred
+        now=$(date +%s)
+        expires=$((now + ttl))
+        username="${expires}:publisher:${now}"
+        cred=$(printf '%s' "$username" | openssl dgst -sha1 -hmac "$TURN_SECRET" -binary | base64)
         local code
         code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 -X POST \
             -H "Content-Type: application/json" \
-            -d "{\"domain\":\"${DOMAIN}\",\"turnSecret\":\"${TURN_SECRET}\",\"iceServers\":[{\"urls\":[\"stun:${DOMAIN}:3478\"]},{\"urls\":[\"turn:${DOMAIN}:3478?transport=udp\",\"turn:${DOMAIN}:3478?transport=tcp\",\"turns:${DOMAIN}:5349?transport=tcp\"],\"username\":\"${ts}\",\"credential\":\"${cred}\"}],\"traffic\":{\"dailyBytes\":${DAILY_BYTES},\"monthlyBytes\":${MONTHLY_BYTES}}}" \
+            -d "{\"domain\":\"${DOMAIN}\",\"turnSecret\":\"${TURN_SECRET}\",\"iceServers\":[{\"urls\":[\"stun:${DOMAIN}:3478\"]},{\"urls\":[\"turn:${DOMAIN}:3478?transport=udp\",\"turn:${DOMAIN}:3478?transport=tcp\",\"turns:${DOMAIN}:5349?transport=tcp\"],\"username\":\"${username}\",\"credential\":\"${cred}\"}],\"traffic\":{\"dailyBytes\":${DAILY_BYTES},\"monthlyBytes\":${MONTHLY_BYTES}}}" \
             "$PUBLISH_URL" 2>&1) || true
-        echo "ice-publisher: user=$ts daily=${DAILY_BYTES}B monthly=${MONTHLY_BYTES}B -> HTTP $code"
+        echo "ice-publisher: user=$username daily=${DAILY_BYTES}B monthly=${MONTHLY_BYTES}B -> HTTP $code"
         sleep "${PUBLISH_INTERVAL:-60}"
     done
 }
@@ -121,11 +137,21 @@ publish_ice() {
 mkdir -p /var/lib/coturn
 generate_config
 
-trap 'kill 0; wait; exit 0' TERM INT
+trap 'kill 0 2>/dev/null || true; wait 2>/dev/null || true; exit 0' TERM INT
 
 watch_certs &
 [ -n "$PUBLISH_URL" ] && publish_ice &
 
 echo "Starting coturn..."
-turnserver -c "$CONF" --pidfile /var/run/turnserver.pid -v &
-wait
+while true; do
+    start_turnserver
+    wait "$TURNSERVER_PID" || true
+    if [ -f "$COTURN_RESTART_EXPECTED" ]; then
+        rm -f "$COTURN_RESTART_EXPECTED"
+        echo "turnserver stopped for certificate reload — restarting..."
+        continue
+    fi
+    echo "ERROR: turnserver exited unexpectedly" >&2
+    kill 0 2>/dev/null || true
+    exit 1
+done

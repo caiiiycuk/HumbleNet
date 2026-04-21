@@ -65,8 +65,6 @@ static bool lookup_peer(const std::string& hostname) {
 		for (auto &game : peerServer->catalog->aliases) {
 			aliases += game.first + ", ";
 		}
-
-		LOG_INFO("lookup_peer: could not find host %s in (%s)\n", hostname.c_str(), aliases.c_str());
 	}
 
 	return found;
@@ -304,11 +302,14 @@ void help(const std::string& prog, const std::string& error = "")
 		std::cerr << "Error: " << error << "\n\n";
 	}
 	std::cerr
-		<< "Humblenet peer match-making server\n"
-		<< " " << prog << "[-h] --email em@example.com --common-name test.example.com\n"
-		<< "   --email Used to request SSL certificate from Let's Encrypt\n"
-		<< "   --common-name Domain name Let's Encrypt will ping during ACME and issue certs for\n"
-		<< "   -h     Displays this help\n"
+		<< "WebRTC-NET peer match-making server\n"
+		<< " " << prog << " [-h|--help] [--tls --tls-cert <path> --tls-key <path>]\n"
+		<< "   Starts the HTTP signaling server on port 8080.\n"
+		<< "   If --tls is provided, a TLS vhost is also started on port 444.\n"
+		<< "   --tls              Enable the TLS vhost\n"
+		<< "   --tls-cert <path>  TLS certificate chain file\n"
+		<< "   --tls-key <path>   TLS private key file\n"
+		<< "   -h, --help Displays this help\n"
 		<< std::endl;
 }
 
@@ -320,86 +321,45 @@ void sighandler(int sig)
 }
 
 int main(int argc, char *argv[]) {
-	char* email = nullptr;
-	char* common_name = nullptr;
-	std::vector<ICEServer> ice_servers;
+	bool enable_tls = false;
+	std::string tls_cert_filepath;
+	std::string tls_private_key_filepath;
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		std::string arg  = argv[i];
-		if (arg == "-h") {
+		if (arg == "-h" || arg == "--help") {
 			help(argv[0]);
 			exit(1);
-		} else if (arg == "--email") {
-			++i;
-			if (i < argc) {
-				email = argv[i];
-			} else {
-				help(argv[0], "--email option requires an argument");
+		} else if (arg == "--tls") {
+			enable_tls = true;
+		} else if (arg == "--tls-cert") {
+			if (++i >= argc) {
+				help(argv[0], "--tls-cert requires a path");
 				exit(2);
 			}
-		} else if (arg == "--common-name") {
-			++i;
-			if (i < argc) {
-				common_name = argv[i];
-			} else {
-				help(argv[0], "--common_name option requires an argument");
+			tls_cert_filepath = argv[i];
+		} else if (arg == "--tls-key") {
+			if (++i >= argc) {
+				help(argv[0], "--tls-key requires a path");
 				exit(2);
 			}
-		} else if (arg == "--ice-servers") {
-			++i;
-			if (i < argc) {
-				std::ifstream ice_servers_stream(argv[i]);
-
-				if (!ice_servers_stream.is_open()) {
-					printf("file '%s' does not exists\n", argv[i]);
-					abort();
-				}
-
-				std::string line;
-				while (std::getline(ice_servers_stream, line)) {
-					if (line.empty() || line[0] == '#') {
-						continue;
-					}
-
-					std::string url, username, password = "";
-					size_t space_pos = line.find(' ');
-
-					if (space_pos == std::string::npos) {
-						url = line;
-					} else {
-						url = line.substr(0, space_pos);
-						std::string creds = line.substr(space_pos + 1);
-						size_t colon_pos = creds.find(' ');
-						if (colon_pos == std::string::npos) {
-							printf("no password specified in line '%s'\n", line.c_str());
-							abort();
-						} else {
-							username = creds.substr(0, colon_pos);
-							password = creds.substr(colon_pos + 1);
-						}
-					}
-
-
-					if (url.find("stun") == 0) {
-						if (!username.empty() || !password.empty()) {
-							printf("Does not support for stun server with credentials\n");
-							abort();
-						}
-						ice_servers.push_back(ICEServer(url));
-					} else {
-						ice_servers.push_back(ICEServer(url, username, password));
-					}
-				}
-				ice_servers_stream.close();
-			} else {
-				help(argv[0], "--ice-servers option requires an argument");
-				exit(2);
-			}
+			tls_private_key_filepath = argv[i];
+		} else {
+			help(argv[0], "Unknown option: " + arg);
+			exit(2);
 		}
 	}
-
-	if (email == nullptr || common_name == nullptr) {
-		help(argv[0], "--email and --common-name are required if you want to run with TLS\n");
+	if (enable_tls && tls_cert_filepath.empty()) {
+		help(argv[0], "--tls requires --tls-cert <path>");
+		exit(2);
+	}
+	if (enable_tls && tls_private_key_filepath.empty()) {
+		help(argv[0], "--tls requires --tls-key <path>");
+		exit(2);
+	}
+	if (!enable_tls && (!tls_cert_filepath.empty() || !tls_private_key_filepath.empty())) {
+		help(argv[0], "--tls-cert and --tls-key require --tls");
+		exit(2);
 	}
 
 	logFileOpen("peer-server.log");
@@ -415,7 +375,6 @@ int main(int argc, char *argv[]) {
 	signal(SIGTERM, sighandler);
 
 	peerServer.reset(new Server());
-	peerServer->iceServers = ice_servers;
 
 	struct lws_context_creation_info info;
 	memset(&info, 0, sizeof(info));
@@ -446,14 +405,14 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	if (email == nullptr || common_name == nullptr) {
-		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
+	if (!enable_tls) {
+		LOG_WARNING("--tls not specified, not starting TLS server\n");
 	} else {
 		info.protocols = protocols_444;
 		info.port = 444;
 		info.vhost_name = "SSL_vhost";
-		info.ssl_cert_filepath = "/etc/letsencrypt/live/net.js-dos.com/fullchain.pem";
-		info.ssl_private_key_filepath = "/etc/letsencrypt/live/net.js-dos.com/privkey.pem";
+		info.ssl_cert_filepath = tls_cert_filepath.c_str();
+		info.ssl_private_key_filepath = tls_private_key_filepath.c_str();
 		info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
 		struct lws_vhost *host_444 = lws_create_vhost(peerServer->context, &info);
 		if (host_444 == NULL) {

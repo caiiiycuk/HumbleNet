@@ -16,7 +16,8 @@ server {
 
 # Port 8000 — HTTPS ping API + test page
 server {
-    listen 8000 ssl http2;
+    listen 8000 ssl;
+    http2 on;
     server_name ${DOMAIN};
 
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;

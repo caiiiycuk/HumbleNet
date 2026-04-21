@@ -4,7 +4,6 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 CreateTool(peer-server
 DIRS
 	.
-	"${CMAKE_CURRENT_LIST_DIR}/../../3rdparty/sqlite-3500400"
 FEATURES
 	cxx_auto_type cxx_range_for
 INCLUDES
@@ -19,7 +18,7 @@ LINK
 	${LWS_BORING_INTERFACE}
 	${LWS_SSL_LIBS}
 PROPERTIES
-	FOLDER HumbleNet/Server
+	FOLDER WebRTC-NET/Server
 	CXX_STANDARD 14
 )
 

@@ -2,6 +2,7 @@
 
 #include "libwebrtc.h"
 
+#include <cstdlib>
 #include <string>
 
 #define LOG printf
@@ -9,8 +10,7 @@
 #define INTERFACE( X )  \
 	X( struct libwebrtc_context* ,      libwebrtc_create_context,               ( lwrtc_callback_function cb ),                                         (cb) )                  \
 	X( void,                            libwebrtc_destroy_context,              ( struct libwebrtc_context* ctx),                                       (ctx) )                 \
-	X( void,                            libwebrtc_set_stun_servers,             ( struct libwebrtc_context* ctx, const char** servers, int count),      (ctx, servers, count) ) \
-	X( void,                            libwebrtc_add_turn_server,              ( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password),      (ctx, server, username, password) ) \
+	X( void,                            libwebrtc_set_ice_servers,              ( struct libwebrtc_context* ctx, const struct libwebrtc_ice_server* servers, int count),      (ctx, servers, count) ) \
 	X( struct libwebrtc_connection*,    libwebrtc_create_connection_extended,   ( struct libwebrtc_context* ctx, void* user_data ),                     (ctx, user_data) )      \
 	X( struct libwebrtc_data_channel*,  libwebrtc_create_channel,               ( struct libwebrtc_connection* conn, const char* name ),                (conn,name) )           \
 	X( int,                             libwebrtc_create_offer,                 ( struct libwebrtc_connection* conn),                                   (conn) )                \
@@ -53,7 +53,13 @@
 
 #define FN_RESOLVE( rtype, name, ... )                      \
 	procHandle = LoadFunction(dllHandle, #name);            \
-	if (!procHandle) { webrtc_UnloadLibrary(); return; }    \
+	if (!procHandle) {                                      \
+		if (webrtc_AllowMicrostackFallback()) {             \
+			webrtc_UnloadLibrary();                         \
+			return;                                         \
+		}                                                   \
+		webrtc_AbortLoad("Missing required WebRTC symbol", #name); \
+	}                                                       \
 	fn_table.name = (FN_##name)procHandle;
 
 
@@ -66,7 +72,6 @@
 
 // declare pointers types for all the interface methods.
 INTERFACE( FN_TYPES );
-
 // declare the function table type
 struct fn_table_t {
 	INTERFACE( FN_FIELDS );
@@ -91,6 +96,8 @@ static fn_table_t fn_table = {
 };
 
 static void webrtc_LoadLibrary();
+static bool webrtc_AllowMicrostackFallback();
+[[noreturn]] static void webrtc_AbortLoad(const char* reason, const char* detail = nullptr);
 
 // implement the loader functions
 INTERFACE( FN_LOADER_IMPL );
@@ -177,6 +184,23 @@ static void webrtc_UnloadLibrary()
 #define WEBRTC_LIBRARY "libwebrtc.dylib"
 #endif
 
+[[noreturn]] static void webrtc_AbortLoad(const char* reason, const char* detail)
+{
+	if (detail) {
+		LOG("%s: %s\n", reason, detail);
+	} else {
+		LOG("%s\n", reason);
+	}
+	LOG("Set USE_MICROWEBRTC=1 to allow fallback to the internal microstack implementation.\n");
+	std::abort();
+}
+
+static bool webrtc_AllowMicrostackFallback()
+{
+	const char* env = std::getenv("USE_MICROWEBRTC");
+	return env != nullptr && env[0] != '\0' && !(env[0] == '0' && env[1] == '\0');
+}
+
 static void webrtc_LoadLibrary()
 {
 #ifdef LOAD_WEBRTC_SO
@@ -226,18 +250,22 @@ static void webrtc_LoadLibrary()
 		}
 	}
 #endif
-	if (dllHandle) {
-		void *procHandle = nullptr;
+		if (dllHandle) {
+			void *procHandle = nullptr;
 
-		INTERFACE( FN_RESOLVE );
+			INTERFACE( FN_RESOLVE );
 
-		LOG("external webrtc implementation loaded\n");
-	} else {
-		fn_table = fn_microstack;
-	}
-#else
-		fn_table = fn_microstack;
-#endif
+			LOG("external webrtc implementation loaded\n");
+		} else {
+			if (webrtc_AllowMicrostackFallback()) {
+				fn_table = fn_microstack;
+			} else {
+				webrtc_AbortLoad("Could not load required WebRTC shared library", WEBRTC_LIBRARY);
+			}
+		}
+	#else
+			fn_table = fn_microstack;
+	#endif
 }
 
 #endif

@@ -59,8 +59,18 @@ if(WIN32 OR LINUX OR APPLE)
 	set(HUMBLENET_DESKTOP ON)
 endif()
 
-option(HUMBLENET_SERVER "Build the humblenet Server" ${HUMBLENET_DESKTOP})
-option(HUMBLENET_TESTS "Build the humblenet tests" ON)
+option(HUMBLENET_SERVER "Build the WebRTC-NET server" ${HUMBLENET_DESKTOP})
+option(HUMBLENET_TESTS "Build the WebRTC-NET tests" ON)
+option(HUMBLENET_EXTERNAL_WEBRTC "Build Linux external libwebrtc backend" OFF)
+
+set(HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/webrtc-native-build" CACHE PATH
+	"Location of the webrtc-native-build provider checkout")
+set(HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR "" CACHE PATH
+	"Include directory for external Linux libwebrtc headers")
+set(HUMBLENET_EXTERNAL_WEBRTC_LIB_DIR "" CACHE PATH
+	"Library directory for external Linux libwebrtc artifacts")
+set(HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES "" CACHE STRING
+	"Semicolon-separated list of external Linux libwebrtc libraries")
 
 if(LINUX OR APPLE)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
@@ -170,7 +180,128 @@ if(HUMBLENET_NATIVE)
 
 	add_subdirectory(3rdparty/webrtc		webrtc)
 
-	add_subdirectory(3rdparty/chromium_webrtc		chromium_webrtc)
+	if(HUMBLENET_EXTERNAL_WEBRTC)
+		if(NOT LINUX)
+			message(FATAL_ERROR "HUMBLENET_EXTERNAL_WEBRTC is currently supported on Linux only")
+		endif()
+
+		set(_external_webrtc_provider_config_name "${CMAKE_BUILD_TYPE}")
+		if(NOT _external_webrtc_provider_config_name)
+			set(_external_webrtc_provider_config_name "Release")
+		endif()
+
+		set(_external_webrtc_provider_build_dir "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/build")
+		if(EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/CMakeLists.txt")
+			set(_external_webrtc_provider_build_config_args "")
+			if(CMAKE_CONFIGURATION_TYPES)
+				list(APPEND _external_webrtc_provider_build_config_args --config ${_external_webrtc_provider_config_name})
+			endif()
+
+			add_custom_target(humblenet_external_webrtc_provider_configure
+				COMMAND ${CMAKE_COMMAND}
+					-S "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}"
+					-B "${_external_webrtc_provider_build_dir}"
+					-DCMAKE_BUILD_TYPE=${_external_webrtc_provider_config_name}
+				COMMENT "Configuring external webrtc-native-build provider"
+			)
+
+			add_custom_target(humblenet_external_webrtc_provider_build
+				COMMAND ${CMAKE_COMMAND}
+					--build "${_external_webrtc_provider_build_dir}"
+					${_external_webrtc_provider_build_config_args}
+				COMMENT "Building external webrtc-native-build provider"
+			)
+			add_dependencies(humblenet_external_webrtc_provider_build humblenet_external_webrtc_provider_configure)
+
+			add_custom_target(humblenet_external_webrtc_provider_install
+				COMMAND ${CMAKE_COMMAND}
+					--build "${_external_webrtc_provider_build_dir}"
+					${_external_webrtc_provider_build_config_args}
+					--target install
+				COMMENT "Installing external webrtc-native-build provider artifacts"
+			)
+			add_dependencies(humblenet_external_webrtc_provider_install humblenet_external_webrtc_provider_build)
+		endif()
+
+		set(_external_webrtc_install_root "")
+		if(EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/VERSION")
+			file(STRINGS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/VERSION" _external_webrtc_provider_version LIMIT_COUNT 1)
+			if(_external_webrtc_provider_version)
+				set(_external_webrtc_install_root
+					"${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/dist/${_external_webrtc_provider_config_name}/webrtc-native-build-${_external_webrtc_provider_version}")
+			endif()
+		endif()
+
+		set(_external_webrtc_include_dir "${HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR}")
+		if(NOT _external_webrtc_include_dir AND EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/include")
+			set(_external_webrtc_include_dir "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/include")
+		endif()
+		if(NOT _external_webrtc_include_dir AND _external_webrtc_install_root AND EXISTS "${_external_webrtc_install_root}/include")
+			set(_external_webrtc_include_dir "${_external_webrtc_install_root}/include")
+		endif()
+
+		set(_external_webrtc_lib_dir "${HUMBLENET_EXTERNAL_WEBRTC_LIB_DIR}")
+		if(NOT _external_webrtc_lib_dir AND EXISTS "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/lib")
+			set(_external_webrtc_lib_dir "${HUMBLENET_EXTERNAL_WEBRTC_PROVIDER_ROOT}/lib")
+		endif()
+		if(NOT _external_webrtc_lib_dir AND _external_webrtc_install_root AND EXISTS "${_external_webrtc_install_root}/lib")
+			set(_external_webrtc_lib_dir "${_external_webrtc_install_root}/lib")
+		endif()
+
+		set(_external_webrtc_libs ${HUMBLENET_EXTERNAL_WEBRTC_LIBRARIES})
+		if(NOT _external_webrtc_libs AND _external_webrtc_lib_dir)
+			set(_external_webrtc_default_libs
+				"${_external_webrtc_lib_dir}/libwebrtc.a"
+				"${_external_webrtc_lib_dir}/libboringssl.a"
+				"${_external_webrtc_lib_dir}/libyuv_internal.a"
+			)
+			set(_external_webrtc_have_default_libs ON)
+			foreach(_external_webrtc_default_lib ${_external_webrtc_default_libs})
+				if(NOT EXISTS "${_external_webrtc_default_lib}")
+					set(_external_webrtc_have_default_libs OFF)
+					break()
+				endif()
+			endforeach()
+			if(_external_webrtc_have_default_libs)
+				list(APPEND _external_webrtc_libs ${_external_webrtc_default_libs} dl X11 expat)
+			endif()
+		endif()
+
+		message(STATUS "WebRTC-NET external WebRTC include dir: ${_external_webrtc_include_dir}")
+		if(_external_webrtc_lib_dir)
+			message(STATUS "WebRTC-NET external WebRTC lib dir: ${_external_webrtc_lib_dir}")
+		endif()
+		if(_external_webrtc_libs)
+			message(STATUS "WebRTC-NET external WebRTC libraries: ${_external_webrtc_libs}")
+		else()
+			message(STATUS "WebRTC-NET external WebRTC libraries: none configured yet")
+		endif()
+
+		if(_external_webrtc_include_dir)
+			add_library(humblenet_external_webrtc INTERFACE)
+			target_include_directories(humblenet_external_webrtc
+				INTERFACE
+					"${_external_webrtc_include_dir}"
+			)
+			if(_external_webrtc_lib_dir)
+				target_link_directories(humblenet_external_webrtc
+					INTERFACE
+						"${_external_webrtc_lib_dir}"
+				)
+			endif()
+			if(_external_webrtc_libs)
+				target_link_libraries(humblenet_external_webrtc
+					INTERFACE
+						${_external_webrtc_libs}
+				)
+			endif()
+		else()
+			message(WARNING
+				"HUMBLENET_EXTERNAL_WEBRTC is enabled but provider headers were not found yet. "
+				"Run humblenet_external_webrtc_provider_install or set HUMBLENET_EXTERNAL_WEBRTC_INCLUDE_DIR manually."
+			)
+		endif()
+	endif()
 
 	if(NOT WIN32)
 		find_package(ZLIB)
@@ -279,9 +410,9 @@ endif()
 
 if(HUMBLENET_DESKTOP)
 	add_subdirectory(3rdparty/Amalgamate	amalgamate-build)
-	add_subdirectory(3rdparty/json-parser	json-parser)
 	add_subdirectory(src/api_builder		apibuilder-build)
 endif()
+add_subdirectory(3rdparty/json-parser	json-parser)
 add_subdirectory(3rdparty/crc				crc)
 add_subdirectory(3rdparty/sha1				sha1)
 add_subdirectory(src/humblenet				humblenet)

@@ -29,6 +29,7 @@
 #include "humblepeer.h"
 
 #include "libsocket.h"
+#include "json.h"
 
 #include "humblenet_p2p_internal.h"
 #include "humblenet_utils.h"
@@ -36,6 +37,138 @@
 #define USE_STUN
 
 HumbleNetState humbleNetState;
+
+namespace {
+
+json_value* find_object_value(json_value* root, const char* key) {
+	if(root == nullptr || root->type != json_object) {
+		return nullptr;
+	}
+
+	for(unsigned int i = 0; i < root->u.object.length; ++i) {
+		json_object_entry& entry = root->u.object.values[i];
+		if(std::strcmp(entry.name, key) == 0) {
+			return entry.value;
+		}
+	}
+
+	return nullptr;
+}
+
+std::string get_optional_json_string(json_value* root, const char* key) {
+	json_value* value = find_object_value(root, key);
+	if(value == nullptr || value->type != json_string) {
+		return "";
+	}
+	return value->u.string.ptr;
+}
+
+bool append_ice_server(const std::string& url,
+	const std::string& username,
+	const std::string& credential,
+	std::vector<humblenet::ICEServer>& servers,
+	std::string& error) {
+	if(url.empty()) {
+		error = "ICE server entry contains an empty url";
+		return false;
+	}
+
+	if(url.rfind("stun:", 0) == 0 || url.rfind("stuns:", 0) == 0) {
+		servers.emplace_back(url);
+		return true;
+	}
+
+	if(url.rfind("turn:", 0) == 0 || url.rfind("turns:", 0) == 0 || !username.empty() || !credential.empty()) {
+		servers.emplace_back(url, username, credential);
+		return true;
+	}
+
+	servers.emplace_back(url);
+	return true;
+}
+
+bool parse_ice_servers_json(const char* json,
+	std::vector<humblenet::ICEServer>& servers,
+	std::string& error) {
+	servers.clear();
+	if(json == nullptr || json[0] == '\0') {
+		return true;
+	}
+
+	json_value* root = json_parse(json, std::strlen(json));
+	if(root == nullptr) {
+		error = "Unable to parse ICE servers JSON";
+		return false;
+	}
+
+	if(root->type != json_array) {
+		json_value_free(root);
+		error = "ICE servers JSON must be an array";
+		return false;
+	}
+
+	for(unsigned int index = 0; index < root->u.array.length; ++index) {
+		json_value* entry = root->u.array.values[index];
+		if(entry == nullptr || entry->type != json_object) {
+			json_value_free(root);
+			error = "Each ICE server entry must be an object";
+			return false;
+		}
+
+		const std::string username = get_optional_json_string(entry, "username");
+		const std::string credential = get_optional_json_string(entry, "credential");
+		json_value* urls = find_object_value(entry, "urls");
+		if(urls == nullptr) {
+			json_value_free(root);
+			error = "ICE server entry is missing urls";
+			return false;
+		}
+
+		if(urls->type == json_string) {
+			if(!append_ice_server(urls->u.string.ptr, username, credential, servers, error)) {
+				json_value_free(root);
+				return false;
+			}
+			continue;
+		}
+
+		if(urls->type != json_array) {
+			json_value_free(root);
+			error = "ICE server urls must be a string or array";
+			return false;
+		}
+
+		for(unsigned int url_index = 0; url_index < urls->u.array.length; ++url_index) {
+			json_value* url = urls->u.array.values[url_index];
+			if(url == nullptr || url->type != json_string) {
+				json_value_free(root);
+				error = "ICE server urls array must only contain strings";
+				return false;
+			}
+
+			if(!append_ice_server(url->u.string.ptr, username, credential, servers, error)) {
+				json_value_free(root);
+				return false;
+			}
+		}
+	}
+
+	json_value_free(root);
+	return true;
+}
+
+void apply_configured_ice_servers_locked() {
+	if(humbleNetState.context == nullptr) {
+		return;
+	}
+
+	internal_set_ice_servers(
+		humbleNetState.context,
+		humbleNetState.configuredIceServers.data(),
+		humbleNetState.configuredIceServers.size());
+}
+
+} // namespace
 
 #ifdef WIN32
 #if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
@@ -197,14 +330,6 @@ int humblenet_connection_write(Connection *connection, const void *buf, uint32_t
 
 		case HUMBLENET_CONNECTION_CONNECTED:
 			assert(connection->socket != NULL);
-
-			const char* use_relay = humblenet_get_hint("p2p_use_relay");
-			if( use_relay && *use_relay == '1' ) {
-				if( ! sendP2PRelayData( humbleNetState.p2pConn.get(), connection->otherPeer, buf, bufsize ) ) {
-					return -1;
-				}
-				return bufsize;
-			}
 		{
 			HUMBLENET_UNGUARD();
 			return internal_write_socket( connection->socket, buf, bufsize );
@@ -550,6 +675,23 @@ ha_bool HUMBLENET_CALL humblenet_init() {
 	return true;
 }
 
+ha_bool HUMBLENET_CALL humblenet_set_iceservers(const char* json) {
+	std::vector<humblenet::ICEServer> parsedServers;
+	std::string error;
+	if(!parse_ice_servers_json(json, parsedServers, error)) {
+		humblenet_set_error(error.c_str());
+		return false;
+	}
+
+	{
+		HUMBLENET_GUARD();
+		humbleNetState.configuredIceServers.swap(parsedServers);
+		apply_configured_ice_servers_locked();
+	}
+
+	return true;
+}
+
 ha_bool internal_p2p_register_protocol() {
 	internal_callbacks_t callbacks;
 
@@ -573,6 +715,7 @@ ha_bool internal_p2p_register_protocol() {
 	humblenet::register_protocol(humbleNetState.context);
 
 	humbleNetState.webRTCSupported = internal_supports_webRTC( humbleNetState.context );
+	apply_configured_ice_servers_locked();
 
 	return true;
 }
@@ -618,20 +761,20 @@ ha_bool HUMBLENET_CALL humblenet_p2p_supported() {
 #define THREAD_LOCAL __thread
 #endif
 
-THREAD_LOCAL const char* errorString = nullptr;
+thread_local std::string errorString;
 
 const char * HUMBLENET_CALL humblenet_get_error() {
-	return errorString;
+	return errorString.empty() ? nullptr : errorString.c_str();
 }
 
 
 void HUMBLENET_CALL humblenet_set_error(const char *error) {
-	errorString = error;
+	errorString = error ? error : "";
 }
 
 
 void HUMBLENET_CALL humblenet_clear_error() {
-	errorString = nullptr;
+	errorString.clear();
 }
 
 // END MISC
@@ -776,5 +919,3 @@ void humblenet_timer( timer_callback_t callback, int timeout, void* data)
 }
 
 #endif
-
-

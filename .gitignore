@@ -12,4 +12,4 @@
 ice-servers.txt
 *.log
 *.pidfile
-net.sqlite3*
+build-external

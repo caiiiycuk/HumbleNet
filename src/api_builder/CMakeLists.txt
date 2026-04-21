@@ -9,5 +9,5 @@ FEATURES
 LINK
 	jsonparser
 PROPERTIES
-	FOLDER HumbleNet/Tools
+	FOLDER WebRTC-NET/Tools
 )

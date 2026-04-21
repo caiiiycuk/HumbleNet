@@ -94,7 +94,7 @@ typedef struct HumbleNetState {
 	std::string gameSecret;
 	std::string authToken;
 	std::string reconnectToken;
-	std::vector<humblenet::ICEServer> iceServers;
+	std::vector<humblenet::ICEServer> configuredIceServers;
 
 	ha_bool webRTCSupported;
 
@@ -237,7 +237,7 @@ ha_bool humblenet_connection_poll(Connection *connection, int timeout_ms);
 /*
  * Accepts new connections
  * returns a new Connection (which you now own) or NULL if no new connections
- * Humblenet will include this connection in future humblenet_connection_poll calls
+ * WebRTC-NET will include this connection in future humblenet_connection_poll calls
  */
 Connection *humblenet_connection_accept();
 

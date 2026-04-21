@@ -55,12 +55,34 @@ Create file in `/etc/supervisor/conf.d/humblenet.conf`:
 
 ```
 [program:humblenet]
-command=/home/caiiiycuk/peer-server --email caiiiycuk@gmail.com --common-name net.js-dos.com --TURN-server auto --TURN-username cloud --TURN-password ...
+command=/home/caiiiycuk/peer-server --tls
 autostart=true
 autorestart=true
 stderr_logfile=/var/log/humblenet.err.log
 stdout_logfile=/var/log/humblenet.out.log
 ```
+
+Current `peer-server` does not accept TURN or ICE configuration flags.
+TURN must be configured in `coturn` itself, and clients must receive the ICE
+server list from application configuration.
+
+For JS/Emscripten clients, provide ICE servers through `window.netConfig`:
+
+```js
+window.netConfig = {
+  iceServers: [
+    { urls: ["stun:stun.l.google.com:19302"] },
+    {
+      urls: ["turn:cloud.js-dos.com:3478?transport=udp"],
+      username: "cloud",
+      credential: "your-password"
+    }
+  ]
+};
+```
+
+Native clients must call `humblenet_set_iceservers()` before establishing
+WebRTC/P2P connections.
 
 Update supervisor and start:
 

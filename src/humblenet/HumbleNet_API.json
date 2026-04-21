@@ -2,83 +2,11 @@
 	"typedefs": [
 		{
 			"typedef": "PeerId",
-			"type": "uint32_t",
-			"cstype": {
-				"type": "int",
-				"mapped": "UInt32"
-			}
+			"type": "uint32_t"
 		}
 		,{
 			"typedef": "ha_bool",
-			"type": "uint8_t",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"bool"
-			}
-		}
-		,{"_comment":"Miscellaneous C# Mappings"}
-		,{
-			"typedef": "PeerId *",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"out UInt32"
-			}
-		}
-		,{
-			"typedef": "const char *",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"string"
-			}
-		}
-		,{
-			"typedef": "char *",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"string"
-			}
-		}
-		,{
-			"typedef": "void *",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"byte[]"
-			}
-		}
-		,{
-			"typedef": "const void *",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"byte[]"
-			}
-		}
-		,{
-			"typedef": "uint32_t",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"UInt32"
-			}
-		}
-		,{
-			"typedef": "uint32_t *",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"out UInt32"
-			}
-		}
-		,{
-			"typedef": "uint8_t",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"byte"
-			}
-		}
-		,{
-			"typedef": "int *",
-			"cstype":{
-				"type":"mapped",
-				"mapped":"out int"
-			}
+			"type": "uint8_t"
 		}
 	]
 	,"enums": [
@@ -108,6 +36,13 @@
 		,{
 			"functionname": "humblenet_init",
 			"returntype": "ha_bool"
+		}
+		,{
+			"functionname": "humblenet_set_iceservers",
+			"returntype": "ha_bool",
+			"params": [
+				{  "paramname": "json", "paramtype": "const char *"}
+			]
 		}
 		,{
 			"functionname": "humblenet_shutdown",

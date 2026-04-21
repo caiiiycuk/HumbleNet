@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
 	// Client token and secret are defined in the peer server configuration
 	// the 4th argument is for user authentication (future feature)
 	if (!humblenet_p2p_init(HUMBLENET_SERVER_URL, client_token, client_secret, NULL)) {
-		printf("ERR! Can't initialize humblenet\n");
+		printf("ERR! Can't initialize WebRTC-NET\n");
 		return 1;
 	}
 

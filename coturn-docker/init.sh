@@ -42,12 +42,14 @@ if [ ! -f .env ]; then
 
     read -p "Enter your domain name (e.g. turn.example.com): " domain
     read -p "Enter your email for Let's Encrypt: " email
+    read -p "Enter PUBLISH_URL (https://..., empty to disable): " publish_url
 
     turn_secret=$(openssl rand -hex 32)
 
     sed -i "s|DOMAIN=.*|DOMAIN=$domain|" .env
     sed -i "s|EMAIL=.*|EMAIL=$email|" .env
     sed -i "s|TURN_SECRET=.*|TURN_SECRET=$turn_secret|" .env
+    awk -v p="$publish_url" '/^PUBLISH_URL=/{ print "PUBLISH_URL=" p; next }1' .env > .env.tmp && mv .env.tmp .env
 
     echo ""
     echo "Configuration saved to .env"
@@ -60,6 +62,11 @@ echo ""
 echo "============================================"
 echo "  Domain:  $DOMAIN"
 echo "  Email:   $EMAIL"
+if [ -n "$PUBLISH_URL" ]; then
+    echo "  Publish: $PUBLISH_URL"
+else
+    echo "  Publish: (disabled)"
+fi
 echo "  Auth:    TURN REST API (ephemeral credentials)"
 echo "============================================"
 echo ""

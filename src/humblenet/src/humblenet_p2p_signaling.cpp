@@ -371,38 +371,6 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			}
 			LOG("My peer id is %u\n", peer);
 			humbleNetState.myPeerId = peer;
-
-			humbleNetState.iceServers.clear();
-
-			if (hello->iceServers()) {
-				auto iceList = hello->iceServers();
-				for (const auto& it : *iceList) {
-					if (it->type() == HumblePeer::ICEServerType::STUNServer) {
-						humbleNetState.iceServers.emplace_back(it->server()->str());
-					} else if (it->type() == HumblePeer::ICEServerType::TURNServer) {
-						auto username = it->username();
-						auto pass = it->password();
-						if (pass && username) {
-							humbleNetState.iceServers.emplace_back(it->server()->str(), username->str(), pass->str());
-						}
-					}
-				}
-			} else {
-				LOG("No STUN/TURN credentials provided by the server\n");
-			}
-
-			std::vector<const char*> stunServers;
-			for (auto& it : humbleNetState.iceServers) {
-				if (it.type == HumblePeer::ICEServerType::STUNServer) {
-					stunServers.emplace_back(it.server.c_str());
-				}
-			}
-			internal_set_stun_servers(humbleNetState.context, stunServers.data(), stunServers.size());
-			for (auto& it : humbleNetState.iceServers) {
-				if (it.type == HumblePeer::ICEServerType::TURNServer) {
-					internal_add_turn_server( humbleNetState.context, it.server.c_str(), it.username.c_str(), it.password.c_str() );
-				}
-			}
 		}
 			break;
 
@@ -478,32 +446,6 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 		}
 			break;
 			
-		case HumblePeer::MessageType::P2PRelayData:
-		{
-			auto relay = reinterpret_cast<const HumblePeer::P2PRelayData*>(msg->message());
-			auto peer = relay->peerId();
-			auto data = relay->data();
-			
-			LOG("Got %d bytes relayed from peer %u\n", data->size(), peer );
-
-			// Sequentially look for the other peer
-			auto it = humbleNetState.connections.begin();
-			for( ; it != humbleNetState.connections.end(); ++it ) {
-				if( it->second->otherPeer == peer )
-					break;
-			}
-			if( it == humbleNetState.connections.end() ) {
-				LOG("Peer %u does not exist\n", peer);
-			} else {
-				Connection* conn = it->second;
-				
-				conn->recvBuffer.emplace_back(data->begin(), data->end());
-				humbleNetState.pendingDataConnections.insert( conn );
-				
-				signal();
-			}
-		}
-			break;
 		case HumblePeer::MessageType::AliasResolved:
 		{
 			auto resolved = reinterpret_cast<const HumblePeer::AliasResolved*>(msg->message());
@@ -532,4 +474,3 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 	
 	return true;
 }
-

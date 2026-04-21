@@ -37,6 +37,9 @@ struct libwebrtc_context {
 	void* chain;
 	ILibWrapper_WebRTC_ConnectionFactory factory;
 	std::vector<std::string> stunServers;
+	std::string turnServer;
+	std::string turnUsername;
+	std::string turnPassword;
 	lwrtc_callback_function callback;
 };
 
@@ -213,22 +216,63 @@ void libwebrtc_destroy_context( struct libwebrtc_context* ctx ) {
 	delete ctx;
 }
 
-void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** servers, int count)
+void libwebrtc_set_ice_servers(struct libwebrtc_context* ctx, const struct libwebrtc_ice_server* servers, int count)
 {
-	ctx->stunServers.clear();
-	for( int i = 0; i < count; ++i ) {
-		ctx->stunServers.push_back( *servers );
-		servers++;
+	if(ctx == NULL) {
+		return;
 	}
-}
 
-void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password)
-{
-	// WARNING completely untested, you will need to fix this if you want to use it
-	sockaddr_in6 turnServer;
-	// TODO: get port from server string, example code in ILibWrapperWebRTC.c for stun servers
+	ctx->stunServers.clear();
+	ctx->turnServer.clear();
+	ctx->turnUsername.clear();
+	ctx->turnPassword.clear();
+
+	for(int i = 0; i < count; ++i) {
+		if(servers[i].url == NULL) {
+			continue;
+		}
+
+		if(servers[i].type == LIBWEBRTC_ICE_SERVER_STUN) {
+			ctx->stunServers.push_back(servers[i].url);
+			continue;
+		}
+
+		if(ctx->turnServer.empty()) {
+			ctx->turnServer = servers[i].url;
+			ctx->turnUsername = servers[i].username ? servers[i].username : "";
+			ctx->turnPassword = servers[i].password ? servers[i].password : "";
+		}
+	}
+
+	if(ctx->turnServer.empty()) {
+		ILibWrapper_WebRTC_ConnectionFactory_SetTurnServer(
+			ctx->factory, NULL, NULL, 0, NULL, 0, ILibWebRTC_TURN_DISABLED);
+		return;
+	}
+
+	std::string turnHost = ctx->turnServer;
 	int port = 3478;
-	if(ILibResolve((char*)server, (char*)"http", &turnServer) == 0) {
+
+	if(turnHost.rfind("turns:", 0) == 0) {
+		turnHost.erase(0, 6);
+		port = 5349;
+	} else if(turnHost.rfind("turn:", 0) == 0) {
+		turnHost.erase(0, 5);
+	}
+
+	size_t queryPos = turnHost.find('?');
+	if(queryPos != std::string::npos) {
+		turnHost.erase(queryPos);
+	}
+	size_t colonPos = turnHost.rfind(':');
+	if(colonPos != std::string::npos) {
+		const std::string portValue = turnHost.substr(colonPos + 1);
+		port = std::atoi(portValue.c_str());
+		turnHost.erase(colonPos);
+	}
+
+	sockaddr_in6 turnServer;
+	if(ILibResolve((char*)turnHost.c_str(), (char*)"http", &turnServer) == 0) {
 		switch(turnServer.sin6_family)
 		{
 			case AF_INET:
@@ -238,7 +282,14 @@ void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* serve
 				turnServer.sin6_port = htons(port);
 				break;
 		}
-		ILibWrapper_WebRTC_ConnectionFactory_SetTurnServer(ctx->factory, &turnServer, (char*)username, strlen(username), (char*)password, strlen(password), ILibWebRTC_TURN_ENABLED);
+		ILibWrapper_WebRTC_ConnectionFactory_SetTurnServer(
+			ctx->factory,
+			&turnServer,
+			(char*)ctx->turnUsername.c_str(),
+			ctx->turnUsername.size(),
+			(char*)ctx->turnPassword.c_str(),
+			ctx->turnPassword.size(),
+			ILibWebRTC_TURN_ENABLED);
 	}
 }
 
@@ -250,7 +301,10 @@ struct libwebrtc_connection* libwebrtc_create_connection_extended( struct libweb
 	for( std::vector<std::string>::iterator it = ctx->stunServers.begin(); it != ctx->stunServers.end(); ++it ) {
 		stunServers.push_back( it->c_str() );
 	}
-	ILibWrapper_WebRTC_Connection_SetStunServers(conn, (char**)&stunServers[0], stunServers.size());
+	ILibWrapper_WebRTC_Connection_SetStunServers(
+		conn,
+		stunServers.empty() ? NULL : (char**)&stunServers[0],
+		stunServers.size());
 	
 	ILibWrapper_WebRTC_Connection_SetUserData(conn, ctx, NULL, user_data);
 

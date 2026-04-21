@@ -7,7 +7,6 @@
 #include "server.h"
 
 #include "humblenet_utils.h"
-#include "./db.h"
 
 
 namespace humblenet {
@@ -205,16 +204,10 @@ namespace humblenet {
 				this->webRTCsupport = true;
 				this->trickleICE = !(hello->flags() & 0x2);
 
-				// send STUN/TURN server credential if client supports webrtc
-				// ';' separator between server, username and password, like this:
-				// "server;username;password"
-				std::vector<ICEServer> iceServers;
-				peerServer->populateStunServers(iceServers);
-
 				// send hello to client
 				std::string reconnectToken = "";
 	#pragma message ("TODO implement reconnect tokens")
-				sendHelloClient(this, peerId, reconnectToken, iceServers);
+				sendHelloClient(this, peerId, reconnectToken);
 			}
 				break;
 
@@ -232,27 +225,6 @@ namespace humblenet {
 				LOG_INFO("P2PDisconnect from peer %u\n", peerId);
 				break;
 
-			case HumblePeer::MessageType::P2PRelayData:
-			{
-				auto relay = reinterpret_cast<const HumblePeer::P2PRelayData*>(msg->message());
-				auto peer = relay->peerId();
-				auto data = relay->data();
-
-				LOG_INFO("P2PRelayData relaying %d bytes from peer %u to %u\n", data->Length(), this->peerId, peer );
-
-				auto it = catalog->peers.find(peer);
-
-				if (it == catalog->peers.end()) {
-					LOG_WARNING(", no such peer\n");
-					sendNoSuchPeer(this, peer);
-				} else {
-					P2PSignalConnection *otherPeer = it->second;
-					assert(otherPeer != NULL);
-					sendP2PRelayData(otherPeer, this->peerId, data->Data(), data->Length() );
-				}
-			}
-				break;
-
 				// Alias processing
 			case HumblePeer::MessageType::AliasRegister:
 			{
@@ -267,7 +239,6 @@ namespace humblenet {
 				} else {
 					if( existing == catalog->aliases.end() ) {
 						catalog->aliases.insert( std::make_pair( alias->c_str(), peerId ) );
-						db::get()->aliasAdded(alias->c_str(), peerId);
 					}
 					LOG_INFO("Registering alias '%s' to peer %u\n", alias->c_str(), peerId );
 	#pragma message ("TODO implement registration success")
@@ -284,7 +255,6 @@ namespace humblenet {
 					auto existing = catalog->aliases.find( alias->c_str() );
 
 					if( existing != catalog->aliases.end() && existing->second == peerId ) {
-						db::get()->aliasRemoved(alias->c_str(), existing->second);
 						catalog->aliases.erase( existing );
 
 						LOG_INFO("Unregistring alias '%s' for peer %u\n", alias->c_str(), peerId );
@@ -296,7 +266,6 @@ namespace humblenet {
 				} else {
 					for( auto it = catalog->aliases.begin(); it != catalog->aliases.end(); ) {
 						if( it->second == peerId ) {
-							db::get()->aliasRemoved(it->first.c_str(), it->second);
 							catalog->aliases.erase( it++ );
 						} else {
 							++it;

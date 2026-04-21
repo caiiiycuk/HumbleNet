@@ -4,7 +4,7 @@ Amalgamate
 ==========
 Copyright (C) 2012 Vinnie Falco
 Provided under the [MIT License](http://www.opensource.org/license/MIT)
-Used for generating the single-source Emscripten port of HumbleNet.
+Used for generating the single-source Emscripten port of WebRTC-NET.
 
 BoringSSL
 =========
@@ -49,4 +49,4 @@ WebRTC Microstack
 =================
 Copyright (C) Eric Young
 Licensed under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
-Used as the main WebRTC implementation in HumbleNet for desktop platforms.
+Used as the main WebRTC implementation in WebRTC-NET for desktop platforms.

@@ -1,7 +1,7 @@
 #ifndef HUMBLEPEER_H
 #define HUMBLEPEER_H
 
-// HumbleNet internal, do not include
+// WebRTC-NET internal, do not include
 
 #include <string>
 #include <unordered_map>
@@ -20,16 +20,21 @@
 namespace humblenet {
 
 	// Ice Server definition
+	enum class ICEServerType {
+		STUNServer,
+		TURNServer
+	};
+
 	struct ICEServer {
-		HumblePeer::ICEServerType type;
+		ICEServerType type;
 		std::string server;
 		std::string username;
 		std::string password;
 
 		ICEServer(const std::string& _server)
-		: type(HumblePeer::ICEServerType::STUNServer), server(_server) {}
+		: type(ICEServerType::STUNServer), server(_server) {}
 		ICEServer(const std::string& _server, const std::string& _username, const std::string& _password)
-		: type(HumblePeer::ICEServerType::TURNServer), server(_server), username(_username), password(_password) {}
+		: type(ICEServerType::TURNServer), server(_server), username(_username), password(_password) {}
 	};
 
 	// abstract type for P2P signaling connection
@@ -94,8 +99,7 @@ namespace humblenet {
 							const std::string& authToken, const std::string& reconnectToken,
 							const std::map<std::string, std::string>& attributes);
 	ha_bool sendHelloClient(humblenet::P2PSignalConnection *conn, PeerId peerId,
-							const std::string& reconnectToken,
-							const std::vector<ICEServer>& iceServers);
+							const std::string& reconnectToken);
 
 	// P2P Handling
 	ha_bool sendNoSuchPeer(humblenet::P2PSignalConnection *conn, PeerId peerId);
@@ -104,7 +108,6 @@ namespace humblenet {
 	ha_bool sendP2PResponse(P2PSignalConnection *conn, PeerId peerId, const char* offer);
 	ha_bool sendICECandidate(humblenet::P2PSignalConnection *conn, PeerId peerId, const char* offer);
 	ha_bool sendP2PDisconnect(humblenet::P2PSignalConnection *conn, PeerId peer);
-	ha_bool sendP2PRelayData(humblenet::P2PSignalConnection *conn, PeerId peer, const void* data, uint16_t length);
 
 	// Name Alias
 	ha_bool sendAliasRegister(P2PSignalConnection *conn, const std::string& alias);

@@ -1,13 +1,18 @@
-name: humblenet-openssl-linux
+name: WebRTC-NET OpenSSL Linux
 
 on:
   push:
     branches: [ "master" ]
+    tags: [ "*" ]
   pull_request:
     branches: [ "master" ]
 
+permissions:
+  contents: write
+
 env:
-  BUILD_TYPE: RelWithDebInfo
+  BUILD_TYPE: Release
+  EMSCRIPTEN_VERSION: 5.0.2
 
 jobs:
   build:
@@ -22,10 +27,16 @@ jobs:
     - name: Install clang++ and deps
       run: |
         sudo apt update
-        sudo apt install -y clang libpcap-dev libcap2-dev libssl-dev     
+        sudo apt install -y clang build-essential ninja-build libpcap-dev libcap2-dev libssl-dev libx11-dev libexpat1-dev libboost-all-dev libglib2.0-dev libgtk-3-dev libpulse-dev libasound2-dev
 
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DUSE_BORINGSSL=False
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DUSE_BORINGSSL=False -DHUMBLENET_EXTERNAL_WEBRTC=ON
+
+    - name: Build external WebRTC provider
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target humblenet_external_webrtc_provider_install
+
+    - name: Reconfigure CMake with external WebRTC artifacts
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DUSE_BORINGSSL=False -DHUMBLENET_EXTERNAL_WEBRTC=ON
 
     - name: Build websockets
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target websockets-build
@@ -33,17 +44,61 @@ jobs:
     - name: Build peer-server
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target peer-server
 
+    - name: Build libwebrtc
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target webrtc_shared
+
     - name: Build ALL
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
     
     - name: Build humblenet_asmjs_amalgamation
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target humblenet_asmjs_amalgamation
 
-    - name: Upload humblenet bundle
+    - name: Install emsdk
+      run: |
+        git clone https://github.com/emscripten-core/emsdk.git "${{ runner.temp }}/emsdk"
+        "${{ runner.temp }}/emsdk/emsdk" install "${{ env.EMSCRIPTEN_VERSION }}"
+        "${{ runner.temp }}/emsdk/emsdk" activate "${{ env.EMSCRIPTEN_VERSION }}"
+        echo "${{ runner.temp }}/emsdk" >> "$GITHUB_PATH"
+        echo "${{ runner.temp }}/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+        echo "EMSDK=${{ runner.temp }}/emsdk" >> "$GITHUB_ENV"
+        echo "EM_CONFIG=${{ runner.temp }}/emsdk/.emscripten" >> "$GITHUB_ENV"
+        echo "EM_CACHE=${{ runner.temp }}/emscripten-cache" >> "$GITHUB_ENV"
+
+    - name: Configure jsapi
+      run: emcmake cmake -S . -B ${{github.workspace}}/build-jsapi -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build jsapi
+      run: ninja -C ${{github.workspace}}/build-jsapi -j32 jsapi
+
+    - name: Verify release artifacts
+      run: |
+        test -f ${{github.workspace}}/build/libwebrtc.so
+        test -f ${{github.workspace}}/build/peer-server.bin.x86_64
+        test -f ${{github.workspace}}/build/libhumblenet.so
+        test -f ${{github.workspace}}/build/libhumblenet_static.a
+        test -f ${{github.workspace}}/build-jsapi/jsapi.mjs
+        test -f ${{github.workspace}}/build-jsapi/jsapi.wasm
+
+    - name: Upload WebRTC-NET bundle
       uses: actions/upload-artifact@v4
       with:
-        name: humblenet
+        name: humblenet-openssl-linux
         path: |
+          build/libwebrtc.so
           build/peer-server.bin.x86_64
-          build/humblenet_asmjs_amalgam.cpp
-          src/humblenet/include/*
+          build/libhumblenet.so
+          build/libhumblenet_static.a
+          build-jsapi/jsapi.mjs
+          build-jsapi/jsapi.wasm
+
+    - name: Create GitHub release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          build/libwebrtc.so
+          build/peer-server.bin.x86_64
+          build/libhumblenet.so
+          build/libhumblenet_static.a
+          build-jsapi/jsapi.mjs
+          build-jsapi/jsapi.wasm

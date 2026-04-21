@@ -31,6 +31,18 @@ struct libwebrtc_connection;
 
 // this represents an active data stream to the peer.
 struct libwebrtc_data_channel;
+
+enum libwebrtc_ice_server_type {
+	LIBWEBRTC_ICE_SERVER_STUN = 1,
+	LIBWEBRTC_ICE_SERVER_TURN = 2,
+};
+
+struct libwebrtc_ice_server {
+	enum libwebrtc_ice_server_type type;
+	const char* url;
+	const char* username;
+	const char* password;
+};
     
 typedef int (*lwrtc_callback_function)(struct libwebrtc_context *context,
     struct libwebrtc_connection *connection, struct libwebrtc_data_channel* channel,
@@ -40,8 +52,7 @@ typedef int (*lwrtc_callback_function)(struct libwebrtc_context *context,
 struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function );
 void libwebrtc_destroy_context( struct libwebrtc_context* );
 
-void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** servers, int count);
-void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password);
+void libwebrtc_set_ice_servers( struct libwebrtc_context* ctx, const struct libwebrtc_ice_server* servers, int count);
     
 struct libwebrtc_connection* libwebrtc_create_connection_extended( struct libwebrtc_context*, void* user_data );
 struct libwebrtc_data_channel* libwebrtc_create_channel( struct libwebrtc_connection* conn, const char* name );
@@ -61,4 +72,3 @@ void libwebrtc_close_connection( struct libwebrtc_connection* );
 #endif
 
 #endif // LIBWEBRTC_H
-

@@ -33,13 +33,8 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 		libwebrtc.options = {};
 
 		libwebrtc.create = function() {
-			if (window.netConfig) {
-				if (window.netConfig.iceServers) {
-					this.options.iceServers = window.netConfig.iceServers;
-				}
-				if (window.netConfig.debug) {
-					console.log("[DEBUG] RTCPeerConnection created", JSON.stringify(this.options, null, 2));
-				}
+			if (window.netConfig && window.netConfig.debug) {
+				console.log("[DEBUG] RTCPeerConnection created", JSON.stringify(this.options, null, 2));
 			}
 			var connection = new RTCPeerConnection(this.options,null);
 			connection.trickle = true;
@@ -254,51 +249,57 @@ void libwebrtc_destroy_context(struct libwebrtc_context* ctx)
 	delete ctx;
 }
 
-void libwebrtc_set_stun_servers( struct libwebrtc_context* ctx, const char** servers, int count)
+void libwebrtc_set_ice_servers(struct libwebrtc_context* ctx, const struct libwebrtc_ice_server* servers, int count)
 {
 	EM_ASM({
-		Module.__libwebrtc.options.iceServers = Module.__libwebrtc.options.iceServers || [];
+		Module.__libwebrtc.options.iceServers = [];
 	});
 
-	for( int i = 0; i < count; ++i ) {
-		EM_ASM_INT({
-			const url = UTF8ToString($0);
-			Module.__libwebrtc.options.iceServers.push({ urls: url.startsWith("stun:") ? url : "stun:" + url });
-		}, *servers);
-		servers++;
+	for(int i = 0; i < count; ++i) {
+		const struct libwebrtc_ice_server* server = servers + i;
+		EM_ASM({
+			const type = HEAP32[$0 >> 2];
+			const urlPtr = HEAPU32[($0 + 4) >> 2];
+			const usernamePtr = HEAPU32[($0 + 8) >> 2];
+			const passwordPtr = HEAPU32[($0 + 12) >> 2];
+			const url = urlPtr ? UTF8ToString(urlPtr) : "";
+			const username = usernamePtr ? UTF8ToString(usernamePtr) : "";
+			const password = passwordPtr ? UTF8ToString(passwordPtr) : "";
+			if (!url) {
+				return;
+			}
+
+			if (type === 1) {
+				Module.__libwebrtc.options.iceServers.push({
+					urls: url.startsWith("stun:") || url.startsWith("stuns:") ? url : "stun:" + url
+				});
+				return;
+			}
+
+			const iceServer = {};
+			if (username.length > 0 && password.length > 0) {
+				iceServer.username = username;
+				iceServer.credential = password;
+			}
+
+			if (url.startsWith("turn:") || url.startsWith("turns:")) {
+				iceServer.urls = url;
+				Module.__libwebrtc.options.iceServers.push(iceServer);
+			} else if (url.endsWith("5349")) {
+				iceServer.urls = "turns:" + url;
+				Module.__libwebrtc.options.iceServers.push(iceServer);
+			} else {
+				Module.__libwebrtc.options.iceServers.push({
+					urls: "turn:" + url + "?transport=udp",
+					...iceServer
+				});
+				Module.__libwebrtc.options.iceServers.push({
+					urls: "turn:" + url + "?transport=tcp",
+					...iceServer
+				});
+			}
+		}, server);
 	}
-}
-
-void libwebrtc_add_turn_server( struct libwebrtc_context* ctx, const char* server, const char* username, const char* password) {
-	EM_ASM({
-		Module.__libwebrtc.options.iceServers = Module.__libwebrtc.options.iceServers || [];
-
-		const server = {};
-		const url = UTF8ToString($0);
-		const username = UTF8ToString($1);
-		const password = UTF8ToString($2);
-		if (username.length > 0 && password.length > 0) {
-			server.username = username;
-			server.credential = password;
-		}
-
-		if (url.startsWith("turn:") || url.startsWith("turns:")) {
-			server.urls = url;
-			Module.__libwebrtc.options.iceServers.push(server);
-		} else if (url.endsWith("5349")) {
-			server.urls = "turns:" + url;
-			Module.__libwebrtc.options.iceServers.push(server);
-		} else {
-			Module.__libwebrtc.options.iceServers.push({
-				urls: "turn:" + url + "?transport=udp",
-				...server
-			});
-			Module.__libwebrtc.options.iceServers.push({
-				urls: "turn:" + url + "?transport=tcp",
-				...server
-			});
-		}
-	}, server, username, password);
 }
 
 struct libwebrtc_connection* libwebrtc_create_connection_extended(struct libwebrtc_context* ctx, void* user_data) {
@@ -493,4 +494,3 @@ void libwebrtc_close_channel( struct libwebrtc_data_channel* channel ) {
 
 
 #endif
-

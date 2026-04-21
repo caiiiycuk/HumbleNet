@@ -4,6 +4,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 if(HUMBLENET_NATIVE)
 	list(APPEND PLATFORM_LIBRARIES
 		webrtc_microstack websockets ssl crypto
+		${CAP_LIB}
 		${CMAKE_THREAD_LIBS_INIT}
 	)
 endif()
@@ -91,7 +92,7 @@ CreateLibrary(humblepeer
 			crc
 			sha1
 	PROPERTIES
-		FOLDER HumbleNet/Library
+		FOLDER WebRTC-NET/Library
 	DEPENDS
 		"${CMAKE_CURRENT_BINARY_DIR}/humblepeer_generated.h"
 	)
@@ -109,19 +110,22 @@ set(CORE_HUMBLENET
 			include
 		PRIVATE
 			src
+			../../3rdparty/json-parser
 	FEATURES
 		cxx_auto_type cxx_range_for
 	DEFINES
 		${PLATFORM_DEFINES}
 		PRIVATE
 			$<$<BOOL:${HAVE_DLOPEN}>:HAVE_DLOPEN>
+			$<$<AND:$<BOOL:${HAVE_DLOPEN}>,$<BOOL:${LINUX}>>:LOAD_WEBRTC_SO>
 			HUMBLENET_LOAD_WEBRTC
 	LINK
 		humblepeer
+		jsonparser
 		${PLATFORM_LIBRARIES}
 		$<$<BOOL:${DL_LIBRARY}>:${DL_LIBRARY}>
 	PROPERTIES
-		FOLDER HumbleNet/Library
+		FOLDER WebRTC-NET/Library
 )
 
 set(CORE_HUMBLENET_LOADER
@@ -144,7 +148,7 @@ set(CORE_HUMBLENET_LOADER
 	LINK
 		$<$<BOOL:${DL_LIBRARY}>:${DL_LIBRARY}>
 	PROPERTIES
-		FOLDER HumbleNet/Library
+		FOLDER WebRTC-NET/Library
 )
 
 CreateLibrary(humblenet
@@ -173,11 +177,11 @@ if(HUMBLENET_DESKTOP)
 		BYPRODUCTS ${amalgam_output}
 		SOURCES humblenet_asmjs_amalgam_template.cpp
 
-		COMMENT "Building source amalgamation for emscripten humblenet"
+		COMMENT "Building source amalgamation for Emscripten WebRTC-NET"
 	)
 	set_target_properties(humblenet_asmjs_amalgamation
 		PROPERTIES
-			FOLDER "HumbleNet/Library"
+			FOLDER "WebRTC-NET/Library"
 	)
 
 	add_custom_command(OUTPUT humblenet_loader_procs.h
@@ -185,32 +189,6 @@ if(HUMBLENET_DESKTOP)
 		MAIN_DEPENDENCY HumbleNet_API.json
 		DEPENDS APIBuilder
 		COMMENT "Process API to humblenet_loader_procs.h"
-	)
-
-	add_custom_target(humblenet_cs
-		COMMAND APIBuilder csharp ${CMAKE_CURRENT_SOURCE_DIR}/HumbleNet_API.json ${CMAKE_CURRENT_SOURCE_DIR}/humblenet_api.cs ${CMAKE_BINARY_DIR}/humblenet.cs
-		MAIN_DEPENDENCY HumbleNet_API.json
-		DEPENDS APIBuilder "${CMAKE_CURRENT_SOURCE_DIR}/humblenet_api.cs"
-		BYPRODUCTS ${CMAKE_BINARY_DIR}/humblenet.cs
-		SOURCES humblenet_api.cs
-		COMMENT "Process API to humblenet.cs"
-	)
-	set_target_properties(humblenet_cs
-		PROPERTIES
-			FOLDER "HumbleNet/Library"
-	)
-
-	CreateModule(humblenet_unity_editor
-	${CORE_HUMBLENET_LOADER}
-	FILES
-		${PLATFORM_EXPORT_FILE}
-	DEFINES
-		PRIVATE
-			HUMBLENET_DLL_BUILD
-	LINK
-		${PLATFORM_EXPORT}
-	PROPERTIES
-		BUNDLE ON
 	)
 
 	CreateLibrary(humblenet_loader
@@ -223,7 +201,15 @@ endif()
 
 if(NOT EMSCRIPTEN)
 
-	if( TARGET chromium_webrtc )
+	set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET "")
+	set(HUMBLENET_WEBRTC_SHARED_SOURCE "webrtc/webrtc_native_linux.cpp")
+	set(HUMBLENET_WEBRTC_SHARED_FEATURES cxx_auto_type cxx_range_for cxx_std_20)
+
+	if(HUMBLENET_EXTERNAL_WEBRTC AND TARGET humblenet_external_webrtc)
+		set(HUMBLENET_WEBRTC_SHARED_LINK_TARGET humblenet_external_webrtc)
+	endif()
+
+	if(HUMBLENET_WEBRTC_SHARED_LINK_TARGET)
 		if(APPLE)
 			set(WEBRTC_PLATFORM_EXPORT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/webrtc/exported_osx.map")
 			set(WEBRTC_PLATFORM_EXPORT "-exported_symbols_list ${WEBRTC_PLATFORM_EXPORT_FILE}")
@@ -238,24 +224,45 @@ if(NOT EMSCRIPTEN)
 		DIRS
 			webrtc
 		FILES
+			${CMAKE_CURRENT_SOURCE_DIR}/${HUMBLENET_WEBRTC_SHARED_SOURCE}
 			${WEBRTC_PLATFORM_EXPORT_FILE}
+		EXCLUDE
+			webrtc/webrtc_native_linux.cpp
 		INCLUDES
 			PRIVATE
 				src
 		DEFINES
 				WEBRTC_DLL_BUILD
+				$<$<BOOL:${HUMBLENET_EXTERNAL_WEBRTC}>:HUMBLENET_EXTERNAL_WEBRTC_PROVIDER>
+				$<$<BOOL:${HUMBLENET_EXTERNAL_WEBRTC}>:WEBRTC_POSIX>
 		FEATURES
-			cxx_auto_type cxx_range_for
+			${HUMBLENET_WEBRTC_SHARED_FEATURES}
 		PROPERTIES
 			OUTPUT_NAME webrtc
-			FOLDER HumbleNet/Library
-		LINK
-			chromium_webrtc
-			${WEBRTC_PLATFORM_EXPORT}
-		)
-	endif()
-	
-	CreateSharedLibrary(humblenet_shared
+			FOLDER WebRTC-NET/Library
+			LINK
+				${HUMBLENET_WEBRTC_SHARED_LINK_TARGET}
+				${WEBRTC_PLATFORM_EXPORT}
+			)
+
+			set(_webrtc_copy_script "${CMAKE_CURRENT_BINARY_DIR}/copy_webrtc_shared_to_build_root.cmake")
+			file(WRITE "${_webrtc_copy_script}"
+				"get_filename_component(target_dir \"\${TARGET_FILE}\" DIRECTORY)\n"
+				"if(NOT target_dir STREQUAL \"\${BUILD_DIR}\")\n"
+				"  execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy_if_different \"\${TARGET_FILE}\" \"\${BUILD_DIR}/\")\n"
+				"endif()\n"
+			)
+			add_custom_command(TARGET webrtc_shared
+				POST_BUILD
+				COMMAND "${CMAKE_COMMAND}"
+					-DTARGET_FILE="$<TARGET_FILE:webrtc_shared>"
+					-DBUILD_DIR="${CMAKE_BINARY_DIR}"
+					-P "${_webrtc_copy_script}"
+				COMMENT "Copying libwebrtc.so to the build root"
+			)
+		endif()
+		
+		CreateSharedLibrary(humblenet_shared
 	${CORE_HUMBLENET}
 	FILES
 		${PLATFORM_EXPORT_FILE}
@@ -266,20 +273,5 @@ if(NOT EMSCRIPTEN)
 		${PLATFORM_EXPORT}
 	PROPERTIES
 		OUTPUT_NAME humblenet
-	)
-endif()
-if(APPLE)
-	CreateModule(humblenet_unity_plugin
-	${CORE_HUMBLENET}
-	FILES
-		${PLATFORM_EXPORT_FILE}
-	DEFINES
-		PRIVATE
-			HUMBLENET_DLL_BUILD
-	LINK
-		${PLATFORM_EXPORT}
-	PROPERTIES
-		OUTPUT_NAME humblenet
-		BUNDLE ON
 	)
 endif()
