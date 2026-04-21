@@ -191,32 +191,6 @@ if(HUMBLENET_DESKTOP)
 		COMMENT "Process API to humblenet_loader_procs.h"
 	)
 
-	add_custom_target(humblenet_cs
-		COMMAND APIBuilder csharp ${CMAKE_CURRENT_SOURCE_DIR}/HumbleNet_API.json ${CMAKE_CURRENT_SOURCE_DIR}/humblenet_api.cs ${CMAKE_BINARY_DIR}/humblenet.cs
-		MAIN_DEPENDENCY HumbleNet_API.json
-		DEPENDS APIBuilder "${CMAKE_CURRENT_SOURCE_DIR}/humblenet_api.cs"
-		BYPRODUCTS ${CMAKE_BINARY_DIR}/humblenet.cs
-		SOURCES humblenet_api.cs
-		COMMENT "Process API to humblenet.cs"
-	)
-	set_target_properties(humblenet_cs
-		PROPERTIES
-			FOLDER "WebRTC-NET/Library"
-	)
-
-	CreateModule(humblenet_unity_editor
-	${CORE_HUMBLENET_LOADER}
-	FILES
-		${PLATFORM_EXPORT_FILE}
-	DEFINES
-		PRIVATE
-			HUMBLENET_DLL_BUILD
-	LINK
-		${PLATFORM_EXPORT}
-	PROPERTIES
-		BUNDLE ON
-	)
-
 	CreateLibrary(humblenet_loader
 	${CORE_HUMBLENET_LOADER}
 	DEFINES
@@ -299,20 +273,5 @@ if(NOT EMSCRIPTEN)
 		${PLATFORM_EXPORT}
 	PROPERTIES
 		OUTPUT_NAME humblenet
-	)
-endif()
-if(APPLE)
-	CreateModule(humblenet_unity_plugin
-	${CORE_HUMBLENET}
-	FILES
-		${PLATFORM_EXPORT_FILE}
-	DEFINES
-		PRIVATE
-			HUMBLENET_DLL_BUILD
-	LINK
-		${PLATFORM_EXPORT}
-	PROPERTIES
-		OUTPUT_NAME humblenet
-		BUNDLE ON
 	)
 endif()

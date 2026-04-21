@@ -15,8 +15,6 @@ Included Language Bindings
 ==========================
 * C/C++
   - a simple C header is available for both C and C++ development.  There is also a BSD socket wrapper that will redirect the C socket API through WebRTC-NET.
-* C#
-  - wrappers are included that work in Unity for its Desktop and WebGL platform support. They should also work in any other .NET application.
 
 Demo applications
 =================
@@ -24,7 +22,7 @@ We have several demos to show off integrating WebRTC-NET.
 
 TestPeer
 --------
-This is a simple "chat" app in the tests folder for both C and C#.   The C app will run on Windows, MacOS X, Linux, and Emscripten.   The C# will run on .NET or Mono.
+This is a simple "chat" app in the tests folder for C. The C app will run on Windows, MacOS X, Linux, and Emscripten.
 
 Quake 2
 -------

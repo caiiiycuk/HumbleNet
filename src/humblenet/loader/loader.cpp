@@ -146,23 +146,6 @@ static ha_bool humblenet_LoadLibrary(const char* override)
 		}
 	}
 #endif
-#ifdef __APPLE__
-	// Special case for OS X. look for a bundle
-	if (!dllHandle) {
-		Dl_info dl_info;
-		if (dladdr((const void*)"", &dl_info) != 0) {
-			std::string buff(dl_info.dli_fname);
-
-			size_t pos = buff.find("/humblenet_unity_editor.bundle");
-			if (pos != buff.npos) {
-				buff.erase(pos);
-				buff += "/humblenet.bundle/Contents/MacOS/humblenet";
-
-				dllHandle = LoadObject(buff.c_str());
-			}
-		}
-	}
-#endif
 #ifdef WIN32
 	// Special case for Win32
 	if (!dllHandle) {
