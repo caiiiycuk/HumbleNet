@@ -55,7 +55,7 @@ Create file in `/etc/supervisor/conf.d/humblenet.conf`:
 
 ```
 [program:humblenet]
-command=/home/caiiiycuk/peer-server --email caiiiycuk@gmail.com --common-name net.js-dos.com
+command=/home/caiiiycuk/peer-server --tls
 autostart=true
 autorestart=true
 stderr_logfile=/var/log/humblenet.err.log

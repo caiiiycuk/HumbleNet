@@ -303,13 +303,12 @@ void help(const std::string& prog, const std::string& error = "")
 	}
 	std::cerr
 		<< "Humblenet peer match-making server\n"
-		<< " " << prog << " [-h] [--email em@example.com --common-name test.example.com]\n"
+		<< " " << prog << " [-h|--help] [--tls]\n"
 		<< "   Starts the HTTP signaling server on port 8080.\n"
-		<< "   If both --email and --common-name are provided, a TLS vhost is also started on port 444.\n"
+		<< "   If --tls is provided, a TLS vhost is also started on port 444.\n"
 		<< "   Certificates must already exist under /etc/letsencrypt/live/net.js-dos.com/.\n"
-		<< "   --email Optional marker required together with --common-name to enable the TLS vhost\n"
-		<< "   --common-name Optional marker required together with --email to enable the TLS vhost\n"
-		<< "   -h     Displays this help\n"
+		<< "   --tls  Enable the TLS vhost using the configured certificate paths\n"
+		<< "   -h, --help Displays this help\n"
 		<< std::endl;
 }
 
@@ -321,35 +320,19 @@ void sighandler(int sig)
 }
 
 int main(int argc, char *argv[]) {
-	char* email = nullptr;
-	char* common_name = nullptr;
+	bool enable_tls = false;
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		std::string arg  = argv[i];
-		if (arg == "-h") {
+		if (arg == "-h" || arg == "--help") {
 			help(argv[0]);
 			exit(1);
-		} else if (arg == "--email") {
-			++i;
-			if (i < argc) {
-				email = argv[i];
-			} else {
-				help(argv[0], "--email option requires an argument");
-				exit(2);
-			}
-		} else if (arg == "--common-name") {
-			++i;
-			if (i < argc) {
-				common_name = argv[i];
-			} else {
-				help(argv[0], "--common_name option requires an argument");
-				exit(2);
-			}
+		} else if (arg == "--tls") {
+			enable_tls = true;
+		} else {
+			help(argv[0], "Unknown option: " + arg);
+			exit(2);
 		}
-	}
-
-	if (email == nullptr || common_name == nullptr) {
-		help(argv[0], "--email and --common-name are required if you want to run with TLS\n");
 	}
 
 	logFileOpen("peer-server.log");
@@ -395,8 +378,8 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	if (email == nullptr || common_name == nullptr) {
-		LOG_WARNING("--email or --common-name not specified, not starting TLS server\n");
+	if (!enable_tls) {
+		LOG_WARNING("--tls not specified, not starting TLS server\n");
 	} else {
 		info.protocols = protocols_444;
 		info.port = 444;
