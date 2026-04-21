@@ -303,11 +303,12 @@ void help(const std::string& prog, const std::string& error = "")
 	}
 	std::cerr
 		<< "Humblenet peer match-making server\n"
-		<< " " << prog << " [-h|--help] [--tls]\n"
+		<< " " << prog << " [-h|--help] [--tls --tls-cert <path> --tls-key <path>]\n"
 		<< "   Starts the HTTP signaling server on port 8080.\n"
 		<< "   If --tls is provided, a TLS vhost is also started on port 444.\n"
-		<< "   Certificates must already exist under /etc/letsencrypt/live/net.js-dos.com/.\n"
-		<< "   --tls  Enable the TLS vhost using the configured certificate paths\n"
+		<< "   --tls              Enable the TLS vhost\n"
+		<< "   --tls-cert <path>  TLS certificate chain file\n"
+		<< "   --tls-key <path>   TLS private key file\n"
 		<< "   -h, --help Displays this help\n"
 		<< std::endl;
 }
@@ -321,6 +322,8 @@ void sighandler(int sig)
 
 int main(int argc, char *argv[]) {
 	bool enable_tls = false;
+	std::string tls_cert_filepath;
+	std::string tls_private_key_filepath;
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		std::string arg  = argv[i];
@@ -329,10 +332,34 @@ int main(int argc, char *argv[]) {
 			exit(1);
 		} else if (arg == "--tls") {
 			enable_tls = true;
+		} else if (arg == "--tls-cert") {
+			if (++i >= argc) {
+				help(argv[0], "--tls-cert requires a path");
+				exit(2);
+			}
+			tls_cert_filepath = argv[i];
+		} else if (arg == "--tls-key") {
+			if (++i >= argc) {
+				help(argv[0], "--tls-key requires a path");
+				exit(2);
+			}
+			tls_private_key_filepath = argv[i];
 		} else {
 			help(argv[0], "Unknown option: " + arg);
 			exit(2);
 		}
+	}
+	if (enable_tls && tls_cert_filepath.empty()) {
+		help(argv[0], "--tls requires --tls-cert <path>");
+		exit(2);
+	}
+	if (enable_tls && tls_private_key_filepath.empty()) {
+		help(argv[0], "--tls requires --tls-key <path>");
+		exit(2);
+	}
+	if (!enable_tls && (!tls_cert_filepath.empty() || !tls_private_key_filepath.empty())) {
+		help(argv[0], "--tls-cert and --tls-key require --tls");
+		exit(2);
 	}
 
 	logFileOpen("peer-server.log");
@@ -384,8 +411,8 @@ int main(int argc, char *argv[]) {
 		info.protocols = protocols_444;
 		info.port = 444;
 		info.vhost_name = "SSL_vhost";
-		info.ssl_cert_filepath = "/etc/letsencrypt/live/net.js-dos.com/fullchain.pem";
-		info.ssl_private_key_filepath = "/etc/letsencrypt/live/net.js-dos.com/privkey.pem";
+		info.ssl_cert_filepath = tls_cert_filepath.c_str();
+		info.ssl_private_key_filepath = tls_private_key_filepath.c_str();
 		info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
 		struct lws_vhost *host_444 = lws_create_vhost(peerServer->context, &info);
 		if (host_444 == NULL) {
