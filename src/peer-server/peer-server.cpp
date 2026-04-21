@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <iostream>
-#include <fstream>
 #include <algorithm>
 
 #ifdef _WIN32
@@ -286,16 +285,10 @@ int callback_humblepeer(struct lws *wsi
 	return 0;
 }
 
-struct lws_protocols protocols_8080[] = {
+struct lws_protocols protocols[] = {
 	  { "humblepeer", callback_humblepeer, 1 }
 	, { NULL, NULL, 0 }
 };
-
-struct lws_protocols protocols_444[] = {
-	  { "humblepeer", callback_humblepeer, 1 }
-	, { NULL, NULL, 0 }
-};
-
 void help(const std::string& prog, const std::string& error = "")
 {
 	if (!error.empty()) {
@@ -303,9 +296,11 @@ void help(const std::string& prog, const std::string& error = "")
 	}
 	std::cerr
 		<< "WebRTC-NET peer match-making server\n"
-		<< " " << prog << " [-h|--help] [--tls --tls-cert <path> --tls-key <path>]\n"
-		<< "   Starts the HTTP signaling server on port 8080.\n"
-		<< "   If --tls is provided, a TLS vhost is also started on port 444.\n"
+		<< " " << prog << " [-h|--help] [--port <port>] [--tls --tls-cert <path> --tls-key <path>]\n"
+		<< "   Starts the signaling server on the provided port, or port 8080 by default.\n"
+		<< "   Without --tls, it serves plain HTTP/WebSocket.\n"
+		<< "   With --tls, it serves HTTPS/WSS on the same --port value.\n"
+		<< "   --port <port>      Signaling server port\n"
 		<< "   --tls              Enable the TLS vhost\n"
 		<< "   --tls-cert <path>  TLS certificate chain file\n"
 		<< "   --tls-key <path>   TLS private key file\n"
@@ -320,8 +315,20 @@ void sighandler(int sig)
 	keepGoing = false;
 }
 
+static bool parsePort(const std::string& value, int& port)
+{
+	char* end = NULL;
+	long parsed = strtol(value.c_str(), &end, 10);
+	if (end == value.c_str() || *end != '\0' || parsed < 1 || parsed > 65535) {
+		return false;
+	}
+	port = static_cast<int>(parsed);
+	return true;
+}
+
 int main(int argc, char *argv[]) {
 	bool enable_tls = false;
+	int port = 8080;
 	std::string tls_cert_filepath;
 	std::string tls_private_key_filepath;
 	// Parse command line arguments
@@ -330,6 +337,15 @@ int main(int argc, char *argv[]) {
 		if (arg == "-h" || arg == "--help") {
 			help(argv[0]);
 			exit(1);
+		} else if (arg == "--port") {
+			if (++i >= argc) {
+				help(argv[0], "--port requires a port number");
+				exit(2);
+			}
+			if (!parsePort(argv[i], port)) {
+				help(argv[0], "--port must be a number from 1 to 65535");
+				exit(2);
+			}
 		} else if (arg == "--tls") {
 			enable_tls = true;
 		} else if (arg == "--tls-cert") {
@@ -362,14 +378,8 @@ int main(int argc, char *argv[]) {
 		exit(2);
 	}
 
-	logFileOpen("peer-server.log");
-	lws_set_log_level(LLL_ERR | LLL_WARN, NULL);
+	logFileOpen("");
 	// lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO | LLL_DEBUG | LLL_EXT, NULL);
-
-	std::ofstream ofs("peer-server.pidfile");
-#ifndef _WIN32
-	ofs << (int)getpid() << std::endl;
-#endif // _WIN32
 
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
@@ -396,27 +406,22 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	info.port = 8080;
-	info.vhost_name = "HTTP_8080_vhost";
-	info.protocols = protocols_8080;
-	struct lws_vhost *host_8080 = lws_create_vhost(peerServer->context, &info);
-	if (host_8080 == NULL) {
-		LOG_ERROR("Failed to create vhost for port 8080\n");
-		exit(1);
-	}
-
+	info.port = port;
+	info.protocols = protocols;
 	if (!enable_tls) {
 		LOG_WARNING("--tls not specified, not starting TLS server\n");
+		info.vhost_name = "HTTP_vhost";
+		if (lws_create_vhost(peerServer->context, &info) == NULL) {
+			LOG_ERROR("Failed to create vhost for port %d\n", port);
+			exit(1);
+		}
 	} else {
-		info.protocols = protocols_444;
-		info.port = 444;
 		info.vhost_name = "SSL_vhost";
 		info.ssl_cert_filepath = tls_cert_filepath.c_str();
 		info.ssl_private_key_filepath = tls_private_key_filepath.c_str();
 		info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
-		struct lws_vhost *host_444 = lws_create_vhost(peerServer->context, &info);
-		if (host_444 == NULL) {
-			LOG_ERROR("Failed to create vhost for port 444\n");
+		if (lws_create_vhost(peerServer->context, &info) == NULL) {
+			LOG_ERROR("Failed to create vhost (SSL) for port %d\n", port);
 			exit(1);
 		}
 	}
@@ -429,10 +434,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	peerServer.reset();
-
-#ifndef _WIN32
-	unlink("peer-server.pidfile");
-#endif // _WIN32
 
 	return 0;
 }

@@ -56,7 +56,8 @@ void log_func(int level, const char* message)
 void logFileOpen(const std::string& logFile)
 {
 	if (logFile.empty()) {
-		logFP = stderr;
+		logFP = stdout;
+		setvbuf(logFP, NULL, _IOLBF, BUFSIZ);
 	} else {
 #if defined(WIN32)
 		fopen_s(&logFP, logFile.c_str(), "a");
@@ -67,4 +68,3 @@ void logFileOpen(const std::string& logFile)
 	}
 	lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE, &log_func);
 }
-

@@ -62,6 +62,9 @@ stderr_logfile=/var/log/humblenet.err.log
 stdout_logfile=/var/log/humblenet.out.log
 ```
 
+With `--tls`, `peer-server` serves HTTPS/WSS on the configured `--port` (default
+`8080`). It does not also start a separate plain-HTTP listener.
+
 Current `peer-server` does not accept TURN or ICE configuration flags.
 TURN must be configured in `coturn` itself, and clients must receive the ICE
 server list from application configuration.
@@ -106,6 +109,9 @@ tail -f /var/log/humblenet.*
 ```
 
 ## Way to test ws (curl)
+
+If you start the server with `--tls`, use `https://` and a trusted certificate.
+The example below assumes plain HTTP mode (no `--tls`).
 
 ```
 curl --include --no-buffer \
