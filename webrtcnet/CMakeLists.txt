@@ -2,10 +2,10 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Release" AND EMSCRIPTEN)
     message(FATAL_ERROR "Build type must be Release (-DCMAKE_BUILD_TYPE=Release)")
 endif()
 
-add_executable(jsapi
+add_executable(webrtcnet
     src/main.cpp
 )
-target_link_options(jsapi PRIVATE
+target_link_options(webrtcnet PRIVATE
     -sINITIAL_MEMORY=16MB
     -sMAXIMUM_MEMORY=16MB
     -sALLOW_MEMORY_GROWTH=0
@@ -17,5 +17,5 @@ target_link_options(jsapi PRIVATE
     -sEXPORT_NAME="HumbleNet"
     -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$intArrayFromString'
 )
-target_link_libraries(jsapi humblenet)
-set_target_properties(jsapi PROPERTIES SUFFIX ".mjs")
+target_link_libraries(webrtcnet humblenet)
+set_target_properties(webrtcnet PROPERTIES SUFFIX ".mjs")

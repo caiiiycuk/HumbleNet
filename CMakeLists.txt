@@ -424,5 +424,5 @@ if(HUMBLENET_TESTS)
 endif()
 
 if(EMSCRIPTEN)
-	add_subdirectory(jsapi 					jsapi)
+	add_subdirectory(webrtcnet 				webrtcnet)
 endif()
