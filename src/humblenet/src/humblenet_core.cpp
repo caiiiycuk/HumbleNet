@@ -557,6 +557,11 @@ int on_accept_channel( internal_socket_t* s, const char* name, void* user_data )
 
 	assert( conn->status == HUMBLENET_CONNECTION_CONNECTING );
 	conn->status = HUMBLENET_CONNECTION_CONNECTED;
+	// This connection is now fully established and must not be treated as pending.
+	// Otherwise signaling reconnect logic can incorrectly close active WebRTC channels.
+	erase_value(humbleNetState.pendingPeerConnectionsOut, conn);
+	erase_value(humbleNetState.pendingPeerConnectionsIn, conn);
+	erase_value(humbleNetState.pendingAliasConnectionsOut, conn);
 
 	LOG("accepted channel: %d:%s\n", conn->otherPeer, name );
 
@@ -574,6 +579,11 @@ int on_connect_channel( internal_socket_t* s, const char* name, void* user_data 
 
 	assert( conn->status == HUMBLENET_CONNECTION_CONNECTING );
 	conn->status = HUMBLENET_CONNECTION_CONNECTED;
+	// This connection is now fully established and must not be treated as pending.
+	// Otherwise signaling reconnect logic can incorrectly close active WebRTC channels.
+	erase_value(humbleNetState.pendingPeerConnectionsOut, conn);
+	erase_value(humbleNetState.pendingPeerConnectionsIn, conn);
+	erase_value(humbleNetState.pendingAliasConnectionsOut, conn);
 
 	LOG("connected channel: %d:%s\n", conn->otherPeer, name );
 	return 0;
