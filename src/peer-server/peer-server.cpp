@@ -10,6 +10,7 @@
 #include <iostream>
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 
 #ifdef _WIN32
 #	define WIN32_LEAN_AND_MEAN
@@ -55,6 +56,65 @@ namespace humblenet {
 
 static std::unique_ptr<Server> peerServer;
 
+static bool lookup_peer(const std::string& hostname);
+
+struct LookupResponseState {
+	char body[16*1024];
+};
+
+static void append_json_escaped(std::string& dst, const std::string& src)
+{
+	for (char ch : src) {
+		switch (ch) {
+		case '"':
+			dst += "\\\"";
+			break;
+		case '\\':
+			dst += "\\\\";
+			break;
+		case '\b':
+			dst += "\\b";
+			break;
+		case '\f':
+			dst += "\\f";
+			break;
+		case '\n':
+			dst += "\\n";
+			break;
+		case '\r':
+			dst += "\\r";
+			break;
+		case '\t':
+			dst += "\\t";
+			break;
+		default:
+			dst += ch;
+			break;
+		}
+	}
+}
+
+static std::string build_lookup_response(const std::string& hostname)
+{
+	if (hostname.empty()) {
+		std::string body = "{\"aliases\":[";
+		bool isFirst = true;
+		for (const auto& entry : peerServer->catalog->aliases) {
+			if (!isFirst) {
+				body += ",";
+			}
+			body += "\"";
+			append_json_escaped(body, entry.first);
+			body += "\"";
+			isFirst = false;
+		}
+		body += "]}";
+		return body;
+	}
+
+	return lookup_peer(hostname) ? "{\"found\":true}" : "{\"found\":false}";
+}
+
 
 static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void *user_data) {
 	return reinterpret_cast<P2PSignalConnection *>(user_data)->processMsg(msg);
@@ -78,8 +138,7 @@ static bool lookup_peer(const std::string& hostname) {
 }
 
 static const char* get_http_body(void *user) {
-	if (*(char*)user) return "{\"found\":true}";
-	else return "{\"found\":false}";
+	return reinterpret_cast<LookupResponseState*>(user)->body;
 }
 
 int callback_humblepeer(struct lws *wsi
@@ -94,9 +153,14 @@ int callback_humblepeer(struct lws *wsi
 	case LWS_CALLBACK_HTTP:
 		{
 			const char *uri = (const char *)in;
-			if (strncmp(uri, "/lookup/", 8) == 0) {
-				const char *hostname = uri + 8;
-				(*(char*)user) = lookup_peer(hostname) ? 1 : 0;
+			if (strncmp(uri, "/lookup", 7) == 0 && (uri[7] == '\0' || uri[7] == '/')) {
+				const char *hostname = uri + 7;
+				if (*hostname == '/') {
+					++hostname;
+				}
+				std::string responseBody = build_lookup_response(hostname);
+				snprintf(reinterpret_cast<LookupResponseState*>(user)->body,
+					sizeof(reinterpret_cast<LookupResponseState*>(user)->body), "%s", responseBody.c_str());
 				unsigned char buffer[8192];
 				memset(buffer, 0, sizeof(buffer));
 				unsigned char *p = buffer;
@@ -310,7 +374,7 @@ int callback_humblepeer(struct lws *wsi
 }
 
 struct lws_protocols protocols[] = {
-	  { "humblepeer", callback_humblepeer, 1 }
+	  { "humblepeer", callback_humblepeer, sizeof(LookupResponseState) }
 	, { NULL, NULL, 0 }
 };
 void help(const std::string& prog, const std::string& error = "")
