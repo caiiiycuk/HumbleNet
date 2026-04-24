@@ -10,11 +10,12 @@ target_link_options(webrtcnet PRIVATE
     -sMAXIMUM_MEMORY=16MB
     -sALLOW_MEMORY_GROWTH=0
     -sEXPORTED_FUNCTIONS=['_malloc','_free']
+    -sEXPORTED_RUNTIME_METHODS=getWasmTableEntry
     -sDISABLE_EXCEPTION_CATCHING=0
     -sASSERTIONS=0
     -sMODULARIZE
     -sEXIT_RUNTIME=1
-    -sEXPORT_NAME="HumbleNet"
+    -sEXPORT_NAME="WebRTCNet"
     -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$intArrayFromString'
 )
 target_link_libraries(webrtcnet humblenet)
