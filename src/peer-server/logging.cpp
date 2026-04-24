@@ -2,9 +2,13 @@
 
 #include <libwebsockets.h>
 #include <cstdarg>
+#include <cctype>
 #include <cstdio>
+#include <algorithm>
 
 static FILE* logFP = NULL;
+static int currentAppLogLevelMask = LLL_ERR | LLL_WARN | LLL_NOTICE;
+static constexpr int kLwsLogLevelMask = LLL_ERR | LLL_WARN | LLL_NOTICE;
 
 const char* logLevel(int level)
 {
@@ -41,6 +45,9 @@ std::string logTime()
 
 void log_func_var(int level, const char* fmt, ...)
 {
+	if ((currentAppLogLevelMask & level) == 0) {
+		return;
+	}
 	va_list vl;
 	va_start(vl, fmt);
 	fprintf(logFP, "[%s]: %s: ", logTime().c_str(), logLevel(level));
@@ -50,11 +57,38 @@ void log_func_var(int level, const char* fmt, ...)
 
 void log_func(int level, const char* message)
 {
+	if ((currentAppLogLevelMask & level) == 0) {
+		return;
+	}
 	fprintf(logFP, "[%s]: %s: %s", logTime().c_str(), logLevel(level), message);
 }
 
-void logFileOpen(const std::string& logFile)
+int logLevelMaskFromName(const std::string& level)
 {
+	std::string normalized = level;
+	std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+		[](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+	if (normalized == "ERROR" || normalized == "ERR" || normalized == "LOG_ERROR") {
+		return LLL_ERR;
+	}
+	if (normalized == "WARN" || normalized == "WARNING" || normalized == "LOG_WARNING") {
+		return LLL_ERR | LLL_WARN;
+	}
+	if (normalized == "NOTICE" || normalized == "LOG_NOTICE") {
+		return LLL_ERR | LLL_WARN | LLL_NOTICE;
+	}
+	if (normalized == "INFO" || normalized == "LOG_INFO") {
+		return LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO;
+	}
+	if (normalized == "DEBUG" || normalized == "LOG_DEBUG") {
+		return LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO | LLL_DEBUG;
+	}
+	return 0;
+}
+
+void logFileOpen(const std::string& logFile, int appLogLevelMask)
+{
+	currentAppLogLevelMask = appLogLevelMask;
 	if (logFile.empty()) {
 		logFP = stdout;
 		setvbuf(logFP, NULL, _IOLBF, BUFSIZ);
@@ -66,5 +100,5 @@ void logFileOpen(const std::string& logFile)
 #endif
 		setvbuf(logFP, NULL, _IOLBF, BUFSIZ);
 	}
-	lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE, &log_func);
+	lws_set_log_level(kLwsLogLevelMask, &log_func);
 }

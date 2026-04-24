@@ -320,7 +320,7 @@ void help(const std::string& prog, const std::string& error = "")
 	}
 	std::cerr
 		<< "WebRTC-NET peer match-making server\n"
-		<< " " << prog << " [-h|--help] [--port <port>] [--tls --tls-cert <path> --tls-key <path>]\n"
+		<< " " << prog << " [-h|--help] [--port <port>] [--tls --tls-cert <path> --tls-key <path>] [-v <level>]\n"
 		<< "   Starts the signaling server on the provided port, or port 8080 by default.\n"
 		<< "   Without --tls, it serves plain HTTP/WebSocket.\n"
 		<< "   With --tls, it serves HTTPS/WSS on the same --port value.\n"
@@ -328,6 +328,7 @@ void help(const std::string& prog, const std::string& error = "")
 		<< "   --tls              Enable the TLS vhost\n"
 		<< "   --tls-cert <path>  TLS certificate chain file\n"
 		<< "   --tls-key <path>   TLS private key file\n"
+		<< "   -v <level>         Application log verbosity: error|warn|notice|info|debug\n"
 		<< "   -h, --help Displays this help\n"
 		<< std::endl;
 }
@@ -353,6 +354,7 @@ static bool parsePort(const std::string& value, int& port)
 int main(int argc, char *argv[]) {
 	bool enable_tls = false;
 	int port = 8080;
+	int logLevelMask = LLL_ERR | LLL_WARN | LLL_NOTICE;
 	std::string tls_cert_filepath;
 	std::string tls_private_key_filepath;
 	// Parse command line arguments
@@ -384,6 +386,16 @@ int main(int argc, char *argv[]) {
 				exit(2);
 			}
 			tls_private_key_filepath = argv[i];
+		} else if (arg == "-v" || arg == "--verbosity") {
+			if (++i >= argc) {
+				help(argv[0], "-v requires a log level (error|warn|notice|info|debug)");
+				exit(2);
+			}
+			logLevelMask = logLevelMaskFromName(argv[i]);
+			if (logLevelMask == 0) {
+				help(argv[0], "Unknown log level for -v: " + std::string(argv[i]));
+				exit(2);
+			}
 		} else {
 			help(argv[0], "Unknown option: " + arg);
 			exit(2);
@@ -402,7 +414,7 @@ int main(int argc, char *argv[]) {
 		exit(2);
 	}
 
-	logFileOpen("");
+	logFileOpen("", logLevelMask);
 	// lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO | LLL_DEBUG | LLL_EXT, NULL);
 
 	signal(SIGINT, sighandler);
