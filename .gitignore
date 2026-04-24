@@ -13,3 +13,5 @@ ice-servers.txt
 *.log
 *.pidfile
 build-external
+
+coturn-docker/*.zip
