@@ -133,6 +133,9 @@ int websocket_protocol(  struct lws *wsi
 		case LWS_CALLBACK_CLIENT_WRITEABLE:
 		case LWS_CALLBACK_SERVER_WRITEABLE:
 		{
+			if (socket->closing && socket->wsi) {
+				return -1;
+			}
 			ret = socket->callbacks.on_writable( socket, socket->user_data );
 		}
 		break;
@@ -471,8 +474,11 @@ void internal_close_socket( internal_socket_t* socket ) {
 		// socket clos process has already started, ignore the request.
 		return;
 	else if( socket->wsi ) {
+		socket->closing = true;
+#ifndef EMSCRIPTEN
+		lws_close_reason(socket->wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0);
+#endif
 		lws_callback_on_writable(socket->wsi);
-		// TODO: How do we clean up ?
 	} else if( socket->webrtc ) {
 		// this will trigger the destruction of the channel and thus the destruction of our socket object.
 		socket->closing = true;

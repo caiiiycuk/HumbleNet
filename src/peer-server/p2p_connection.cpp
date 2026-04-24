@@ -10,6 +10,14 @@
 
 
 namespace humblenet {
+	namespace {
+		uint64_t nowMs()
+		{
+			return std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now().time_since_epoch()).count();
+		}
+	}
+
 	ha_bool P2PSignalConnection::processMsg(const HumblePeer::Message* msg)
 	{
 		auto msgType = msg->message_type();
@@ -62,7 +70,7 @@ namespace humblenet {
 					LOG_INFO("(%s)\n", otherPeer->url.c_str());
 
 					// TODO: should check that it doesn't exist already
-					this->connectedPeers.insert(otherPeer);
+					this->connectedPeers.insert(otherPeer->peerId);
 
 					// set peer id to originator so target knows who wants to connect
 					sendP2PConnect(otherPeer, this->peerId, p2p->flags(), p2p->offer()->c_str());
@@ -90,7 +98,7 @@ namespace humblenet {
 					assert(otherPeer != NULL);
 					assert(otherPeer->peerId == peer);
 
-					bool otherPeerConnected = (otherPeer->connectedPeers.find(this) != otherPeer->connectedPeers.end());
+					bool otherPeerConnected = otherPeer->connectedPeers.find(this->peerId) != otherPeer->connectedPeers.end();
 					if (!otherPeerConnected) {
 						// we got P2PResponse but there's been no P2PConnect from
 						// the peer we're supposed to respond to
@@ -101,7 +109,7 @@ namespace humblenet {
 					}
 
 					// TODO: should assert it's not there yet
-					this->connectedPeers.insert(otherPeer);
+					this->connectedPeers.insert(otherPeer->peerId);
 
 					// set peer id to originator so target knows who wants to connect
 					sendP2PResponse(otherPeer, this->peerId, p2p->offer()->c_str());
@@ -196,18 +204,38 @@ namespace humblenet {
 					}
 				}
 
-				// generate peer id for this peer
-				peerId = this->catalog->generateNewPeerId();
-				LOG_INFO("Got hello from \"%s\" (peer %u, game %u, platform: %s)\n", url.c_str(), peerId, this->game->gameId, platform ? platform->c_str(): "");
+				bool resumed = false;
+				std::string requestedReconnectToken = hello->reconnectToken() ? hello->reconnectToken()->str() : "";
+				PeerSession *peerSession = NULL;
+				if (!requestedReconnectToken.empty()) {
+					peerSession = this->catalog->findSessionByReconnectToken(requestedReconnectToken);
+					if (peerSession == NULL) {
+						LOG_INFO("Resume token rejected for \"%s\": unknown token\n", url.c_str());
+					} else if (peerSession->expiresAtMs != 0 && peerSession->expiresAtMs <= nowMs()) {
+						LOG_WARNING("Resume token expired for \"%s\": peer %u exceeded the reconnect grace period\n", url.c_str(), peerSession->peerId);
+						this->catalog->destroySession(peerSession->peerId);
+						peerSession = NULL;
+					} else {
+						if (peerSession->connection != NULL) {
+							LOG_INFO("Resume token accepted for \"%s\": replacing lingering connection for peer %u\n", url.c_str(), peerSession->peerId);
+						}
+						resumed = true;
+					}
+				}
 
-				catalog->peers.insert(std::make_pair(peerId, this));
+				if (peerSession == NULL) {
+					peerSession = this->catalog->createSession();
+				}
+
+				this->catalog->attachSession(peerSession, this);
 				this->webRTCsupport = true;
 				this->trickleICE = !(hello->flags() & 0x2);
+				LOG_INFO("%s signaling session from \"%s\" (peer %u, platform: %s)\n",
+					resumed ? "Resumed" : "Created",
+					url.c_str(), peerId, platform ? platform->c_str(): "");
 
 				// send hello to client
-				std::string reconnectToken = "";
-	#pragma message ("TODO implement reconnect tokens")
-				sendHelloClient(this, peerId, reconnectToken);
+				sendHelloClient(this, peerId, peerSession->reconnectToken);
 			}
 				break;
 
@@ -237,9 +265,7 @@ namespace humblenet {
 					LOG_INFO("Rejecting peer %u's request to register alias '%s' which is already registered to peer %u\n", peerId, alias->c_str(), existing->second );
 	#pragma message ("TODO implement registration failure")
 				} else {
-					if( existing == catalog->aliases.end() ) {
-						catalog->aliases.insert( std::make_pair( alias->c_str(), peerId ) );
-					}
+					catalog->registerAlias(session, alias->c_str());
 					LOG_INFO("Registering alias '%s' to peer %u\n", alias->c_str(), peerId );
 	#pragma message ("TODO implement registration success")
 				}
@@ -252,11 +278,7 @@ namespace humblenet {
 				auto alias = unreg->alias();
 
 				if (alias) {
-					auto existing = catalog->aliases.find( alias->c_str() );
-
-					if( existing != catalog->aliases.end() && existing->second == peerId ) {
-						catalog->aliases.erase( existing );
-
+					if(catalog->unregisterAlias(session, alias->c_str())) {
 						LOG_INFO("Unregistring alias '%s' for peer %u\n", alias->c_str(), peerId );
 	#pragma message ("TODO implement unregister sucess")
 					} else {
@@ -264,14 +286,7 @@ namespace humblenet {
 	#pragma message ("TODO implement unregister failure")
 					}
 				} else {
-					for( auto it = catalog->aliases.begin(); it != catalog->aliases.end(); ) {
-						if( it->second == peerId ) {
-							catalog->aliases.erase( it++ );
-						} else {
-							++it;
-						}
-					}
-
+					catalog->unregisterAllAliases(session);
 					LOG_INFO("Unregistring all aliases for peer for peer %u\n", peerId );
 	#pragma message ("TODO implement unregister sucess")
 				}
@@ -316,7 +331,7 @@ namespace humblenet {
 					}
 
 					LOG_INFO("Query for alias '%s' for peer %u resolved to %d peers\n", query.c_str(), peerId,
-						matched.size(), game->aliases.size() );
+						matched.size());
 
 					sendAliasQueryResolved(this, query, matched);
 					return true;
@@ -331,13 +346,13 @@ namespace humblenet {
 					}
 
 					LOG_INFO("Query for aliases '%s' for peer %u resolved to %d/%d peers\n", query.c_str(), peerId,
-						matched.size(), game->aliases.size() );
+						matched.size(), catalog->aliases.size() );
 
 					cachedQuery = query;
 					updatedAt = now;
 				} else {
 					LOG_INFO("[CACHE] Query for aliases '%s' for peer %u resolved to %d/%d peers\n", query.c_str(), peerId,
-						matched.size(), game->aliases.size() );
+						matched.size(), catalog->aliases.size() );
 				}
 
 				sendAliasQueryResolved(this, query, matched);

@@ -8,6 +8,7 @@ struct lws;
 
 namespace humblenet {
 	struct Catalog;
+	struct PeerSession;
 	struct Server;
 
 	enum HumblePeerState {
@@ -28,14 +29,13 @@ namespace humblenet {
 
 		bool webRTCsupport;
 		bool trickleICE;
+		bool peerInitiatedClose;
 
 		Catalog *catalog;
+		PeerSession *session;
+		std::unordered_set<PeerId> connectedPeers;
 
 		std::string url;
-
-		// peers which have a P2P connection with this one
-		// pointer not owned
-		std::unordered_set<P2PSignalConnection *> connectedPeers;
 
 
 		P2PSignalConnection(Server* s)
@@ -45,7 +45,9 @@ namespace humblenet {
 		, state(Opening)
 		, webRTCsupport(false)
 		, trickleICE(true)
+		, peerInitiatedClose(false)
 		, catalog(NULL)
+		, session(NULL)
 		{
 		}
 

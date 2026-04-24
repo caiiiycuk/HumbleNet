@@ -21,7 +21,15 @@ ha_bool internal_alias_register( const char* name ) {
 		return 0;
 	}
 
-	return humblenet::sendAliasRegister(humbleNetState.p2pConn.get(), name);
+	ha_bool sent = humblenet::sendAliasRegister(humbleNetState.p2pConn.get(), name);
+	if (sent) {
+		humbleNetState.pendingAliasUnregistrations.erase(name);
+		humbleNetState.pendingAliasRegistrations.insert(name);
+		if (!humblenet::sendAliasLookup(humbleNetState.p2pConn.get(), name)) {
+			LOG("Failed to schedule alias confirmation lookup for \"%s\"\n", name);
+		}
+	}
+	return sent;
 }
 
 ha_bool internal_alias_unregister( const char* name ) {
@@ -30,9 +38,21 @@ ha_bool internal_alias_unregister( const char* name ) {
 		return 0;
 	}
 
-	if (!name) name = "";
-
-	return humblenet::sendAliasUnregister(humbleNetState.p2pConn.get(), name);
+	const char *alias = name ? name : "";
+	ha_bool sent = humblenet::sendAliasUnregister(humbleNetState.p2pConn.get(), alias);
+	if (sent) {
+		if (name) {
+			humbleNetState.registeredAliases.erase(name);
+			humbleNetState.pendingAliasRegistrations.erase(name);
+			humbleNetState.pendingAliasUnregistrations.insert(name);
+		} else {
+			humbleNetState.registeredAliases.clear();
+			humbleNetState.pendingAliasRegistrations.clear();
+			humbleNetState.pendingAliasUnregistrations.clear();
+			humbleNetState.pendingAliasUnregisterAll = true;
+		}
+	}
+	return sent;
 }
 
 PeerId internal_alias_lookup( const char* name ) {
@@ -113,6 +133,25 @@ void internal_alias_resolved_to( const std::string& alias, PeerId peer ) {
 
 }
 
+bool internal_alias_handle_registration_resolution(const std::string& alias, PeerId peer)
+{
+	auto pending = humbleNetState.pendingAliasRegistrations.find(alias);
+	if (pending == humbleNetState.pendingAliasRegistrations.end()) {
+		return false;
+	}
+
+	humbleNetState.pendingAliasRegistrations.erase(pending);
+	if (peer != 0 && peer == humbleNetState.myPeerId) {
+		humbleNetState.registeredAliases.insert(alias);
+		LOG("Alias \"%s\" registration confirmed for peer %u\n", alias.c_str(), peer);
+	} else {
+		humbleNetState.registeredAliases.erase(alias);
+		LOG("Alias \"%s\" registration rejected or unresolved (resolved to %u)\n", alias.c_str(), peer);
+	}
+
+	return true;
+}
+
 ha_bool internal_alias_is_virtual_peer( PeerId peer ) {
 	return (peer & VIRTUAL_PEER) == VIRTUAL_PEER;
 }
@@ -173,5 +212,3 @@ Connection* internal_alias_create_connection( PeerId peer ) {
 void internal_alias_remove_connection( Connection* conn ) {
 	virtualPeerConnections.erase( conn );
 }
-
-

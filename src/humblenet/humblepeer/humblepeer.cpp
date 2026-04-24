@@ -264,7 +264,7 @@ namespace humblenet {
 	ha_bool sendAliasQuery(P2PSignalConnection *conn, const std::string& alias)
 	{
 		flatbuffers::FlatBufferBuilder fbb(DEFAULT_FBB_SIZE);
-		auto packet = HumblePeer::CreateAliasRegister(fbb, fbb.CreateString(alias));
+		auto packet = HumblePeer::CreateAliasQuery(fbb, fbb.CreateString(alias));
 		auto msg = HumblePeer::CreateMessage(fbb, HumblePeer::MessageType::AliasQuery, packet.Union());
 		fbb.Finish(msg);
 

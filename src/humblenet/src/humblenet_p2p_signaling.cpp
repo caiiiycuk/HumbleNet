@@ -14,8 +14,157 @@
 	#include <Windows.h>
 #endif
 
+#include <algorithm>
+#include <chrono>
+#include <unordered_set>
+
 
 static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void *user_data);
+
+namespace {
+	static const uint32_t kReconnectBaseDelayMs = 500;
+	static const uint32_t kReconnectMaxDelayMs = 30000;
+
+	void replay_alias_registration(const std::string& alias)
+	{
+		if (!humbleNetState.p2pConn) {
+			return;
+		}
+
+		if (humblenet::sendAliasRegister(humbleNetState.p2pConn.get(), alias)) {
+			humbleNetState.pendingAliasRegistrations.insert(alias);
+			humblenet::sendAliasLookup(humbleNetState.p2pConn.get(), alias);
+		}
+	}
+
+	uint32_t computeReconnectDelayMs(uint32_t attempt)
+	{
+		uint32_t cappedAttempt = std::min<uint32_t>(attempt, 6);
+		uint32_t exponentialDelay = kReconnectBaseDelayMs << cappedAttempt;
+		uint32_t cappedDelay = std::min(kReconnectMaxDelayMs, exponentialDelay);
+		uint64_t seed = std::chrono::steady_clock::now().time_since_epoch().count();
+		seed ^= static_cast<uint64_t>(attempt + 1) * 0x9E3779B97F4A7C15ULL;
+		uint32_t jitterRange = std::max<uint32_t>(1, cappedDelay / 4);
+		uint32_t jitter = static_cast<uint32_t>(seed % (jitterRange + 1));
+		return std::min(kReconnectMaxDelayMs, cappedDelay + jitter);
+	}
+
+	void replay_registered_aliases()
+	{
+		for (const auto& alias : humbleNetState.registeredAliases) {
+			replay_alias_registration(alias);
+		}
+	}
+
+	void replay_pending_alias_registrations()
+	{
+		std::vector<std::string> aliases(
+			humbleNetState.pendingAliasRegistrations.begin(),
+			humbleNetState.pendingAliasRegistrations.end()
+		);
+
+		for (const auto& alias : aliases) {
+			replay_alias_registration(alias);
+		}
+	}
+
+	void replay_pending_alias_unregistrations()
+	{
+		if (!humbleNetState.p2pConn) {
+			return;
+		}
+
+		if (humbleNetState.pendingAliasUnregisterAll) {
+			humblenet::sendAliasUnregister(humbleNetState.p2pConn.get(), "");
+			return;
+		}
+
+		for (const auto& alias : humbleNetState.pendingAliasUnregistrations) {
+			humblenet::sendAliasUnregister(humbleNetState.p2pConn.get(), alias);
+		}
+	}
+
+	void replay_pending_alias_queries()
+	{
+		if (!humbleNetState.p2pConn) {
+			return;
+		}
+
+		std::vector<std::string> queries;
+		queries.reserve(humbleNetState.pendingAliasQueryOut.size());
+		for (const auto& it : humbleNetState.pendingAliasQueryOut) {
+			queries.push_back(it.first);
+		}
+
+		for (const auto& query : queries) {
+			if (!humblenet::sendAliasQuery(humbleNetState.p2pConn.get(), query)) {
+				LOG("Failed to replay alias query \"%s\"\n", query.c_str());
+			}
+		}
+	}
+
+	void reconnect_signaling_timer(void* data);
+
+	void schedule_signaling_reconnect(const char* reason)
+	{
+		if (!humbleNetState.signalingReconnectEnabled) {
+			return;
+		}
+		if (humbleNetState.reconnectScheduled) {
+			return;
+		}
+
+		uint32_t delayMs = computeReconnectDelayMs(humbleNetState.reconnectAttempt);
+		++humbleNetState.reconnectAttempt;
+		humbleNetState.reconnectScheduled = true;
+
+		uintptr_t generation = static_cast<uintptr_t>(++humbleNetState.reconnectGeneration);
+		LOG("Scheduling signaling reconnect in %u ms (%s)\n", delayMs, reason);
+		humblenet_timer(reconnect_signaling_timer, delayMs, reinterpret_cast<void*>(generation));
+	}
+
+	void reconnect_signaling_timer(void* data)
+	{
+		HUMBLENET_GUARD();
+
+		uintptr_t generation = reinterpret_cast<uintptr_t>(data);
+		if (!humbleNetState.signalingReconnectEnabled ||
+			generation != static_cast<uintptr_t>(humbleNetState.reconnectGeneration)) {
+			return;
+		}
+
+		humbleNetState.reconnectScheduled = false;
+		humblenet_signaling_connect();
+	}
+
+	void reset_signaling_connection()
+	{
+		if (humbleNetState.myPeerId != 0) {
+			humbleNetState.reconnectPeerId = humbleNetState.myPeerId;
+		}
+		humbleNetState.myPeerId = 0;
+
+		std::unordered_set<Connection*> inFlightConnections;
+		for (const auto& it : humbleNetState.pendingPeerConnectionsOut) {
+			inFlightConnections.insert(it.second);
+		}
+		for (const auto& it : humbleNetState.pendingPeerConnectionsIn) {
+			inFlightConnections.insert(it.second);
+		}
+		for (const auto& it : humbleNetState.pendingAliasConnectionsOut) {
+			inFlightConnections.insert(it.second);
+		}
+		for (Connection* conn : inFlightConnections) {
+			if (conn != NULL) {
+				humblenet_connection_set_closed(conn);
+			}
+		}
+
+		if (humbleNetState.p2pConn) {
+			humbleNetState.p2pConn.reset();
+		}
+	}
+}
 
 ha_bool humblenet_signaling_connect() {
 	using namespace humblenet;
@@ -23,16 +172,21 @@ ha_bool humblenet_signaling_connect() {
 	if (humbleNetState.p2pConn) {
 		humbleNetState.p2pConn->disconnect();
 		humbleNetState.p2pConn.reset();
-		humbleNetState.myPeerId = 0;
 	}
+	if (humbleNetState.myPeerId != 0) {
+		humbleNetState.reconnectPeerId = humbleNetState.myPeerId;
+	}
+	humbleNetState.myPeerId = 0;
 
 	LOG("connecting to signaling server \"%s\" with gameToken \"%s\" \n", humbleNetState.signalingServerAddr.c_str(), humbleNetState.gameToken.c_str());
+	humbleNetState.reconnectScheduled = false;
 
 	humbleNetState.p2pConn.reset(new P2PSignalConnection);
 	humbleNetState.p2pConn->wsi = internal_connect_websocket(humbleNetState.signalingServerAddr.c_str(), "humblepeer");
 
 	if (humbleNetState.p2pConn->wsi == NULL) {
 		humbleNetState.p2pConn.reset();
+		schedule_signaling_reconnect("connect failed");
 		// TODO: can we get more specific reason ?
 		humblenet_set_error("WebSocket connection to signaling server failed");
 		return false;
@@ -160,7 +314,8 @@ namespace humblenet {
 		if (!helloSuccess) {
 			// something went wrong, close the connection
 			// don't humblenet_set_error, sendHelloServer should have done that
-			humbleNetState.p2pConn.reset();
+			reset_signaling_connection();
+			schedule_signaling_reconnect("hello failed");
 			return -1;
 		}
 		return 0;
@@ -194,7 +349,8 @@ namespace humblenet {
 		ha_bool retval = parseMessage(conn->recvBuf, p2pSignalProcess, NULL);
 		if (!retval) {
 			// error while parsing a message, close the connection
-			humbleNetState.p2pConn.reset();
+			reset_signaling_connection();
+			schedule_signaling_reconnect("message parse failed");
 			return -1;
 		}
 		return 0;
@@ -227,8 +383,8 @@ namespace humblenet {
 		int retval = internal_write_socket( conn->wsi, &conn->sendBuf[0], conn->sendBuf.size() );
 		if (retval < 0) {
 			// error while sending, close the connection
-			// TODO: should try to reopen after some time
-			humbleNetState.p2pConn.reset();
+			reset_signaling_connection();
+			schedule_signaling_reconnect("write failed");
 			return -1;
 		}
 
@@ -244,11 +400,8 @@ namespace humblenet {
 
 		if( humbleNetState.p2pConn ) {
 			if( s == humbleNetState.p2pConn->wsi ) {
-
-				// handle retry...
-				humbleNetState.p2pConn.reset();
-				humbleNetState.myPeerId = 0;
-
+				reset_signaling_connection();
+				schedule_signaling_reconnect("socket disconnected");
 				return 0;
 			}
 		}
@@ -364,13 +517,31 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 		{
 			auto hello = reinterpret_cast<const HumblePeer::HelloClient*>(msg->message());
 			PeerId peer = static_cast<PeerId>(hello->peerId());
+			PeerId previousPeerId = humbleNetState.reconnectPeerId;
+			bool hadReconnectToken = !humbleNetState.reconnectToken.empty();
 
-			if (humbleNetState.myPeerId != 0) {
-				LOG("Error: got HelloClient but we already have a peer id\n");
-				return true;
-			}
-			LOG("My peer id is %u\n", peer);
+			humbleNetState.reconnectToken = hello->reconnectToken() ? hello->reconnectToken()->str() : "";
 			humbleNetState.myPeerId = peer;
+			humbleNetState.reconnectPeerId = 0;
+			humbleNetState.reconnectAttempt = 0;
+			humbleNetState.reconnectScheduled = false;
+
+			if (previousPeerId != 0 && previousPeerId == peer && hadReconnectToken) {
+				LOG("Signaling resume accepted for peer %u\n", peer);
+				replay_pending_alias_unregistrations();
+				replay_registered_aliases();
+				replay_pending_alias_registrations();
+			} else if (previousPeerId != 0 && previousPeerId != peer) {
+				LOG("Signaling resume rejected, assigned fresh peer id %u (previously %u)\n", peer, previousPeerId);
+				humbleNetState.pendingAliasUnregistrations.clear();
+				humbleNetState.pendingAliasUnregisterAll = false;
+				replay_registered_aliases();
+				replay_pending_alias_registrations();
+			} else {
+				LOG("My peer id is %u\n", peer);
+			}
+
+			replay_pending_alias_queries();
 		}
 			break;
 
@@ -449,8 +620,15 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 		case HumblePeer::MessageType::AliasResolved:
 		{
 			auto resolved = reinterpret_cast<const HumblePeer::AliasResolved*>(msg->message());
-			
-			internal_alias_resolved_to( resolved->alias()->c_str(), resolved->peerId() );
+			std::string alias = resolved->alias()->c_str();
+			PeerId peer = resolved->peerId();
+			bool handledRegistration = internal_alias_handle_registration_resolution(alias, peer);
+
+			if (humbleNetState.pendingAliasConnectionsOut.find(alias) != humbleNetState.pendingAliasConnectionsOut.end()) {
+				internal_alias_resolved_to(alias, peer);
+			} else if (!handledRegistration) {
+				LOG("Got resolve message for alias \"%s\" without a pending lookup\n", alias.c_str());
+			}
 		}
 			break;
 

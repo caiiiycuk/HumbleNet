@@ -9,6 +9,7 @@
 #include <memory>
 #include <deque>
 #include <functional>
+#include <unordered_set>
 
 // TODO: should have a way to disable this on release builds
 #define LOG printf
@@ -86,23 +87,38 @@ typedef struct HumbleNetState {
 	std::unordered_map<PeerId, uint64_t> peerBlacklist;
 
 	PeerId myPeerId;
+	PeerId reconnectPeerId;
 
 	std::unique_ptr<humblenet::P2PSignalConnection> p2pConn;
 
 	std::string signalingServerAddr;
-	std::string gameToken;
-	std::string gameSecret;
-	std::string authToken;
-	std::string reconnectToken;
-	std::vector<humblenet::ICEServer> configuredIceServers;
+		std::string gameToken;
+		std::string gameSecret;
+		std::string authToken;
+		std::string reconnectToken;
+		std::vector<humblenet::ICEServer> configuredIceServers;
+		std::unordered_set<std::string> registeredAliases;
+		std::unordered_set<std::string> pendingAliasRegistrations;
+		std::unordered_set<std::string> pendingAliasUnregistrations;
+		bool pendingAliasUnregisterAll;
 
 	ha_bool webRTCSupported;
+	ha_bool signalingReconnectEnabled;
+	ha_bool reconnectScheduled;
+	uint32_t reconnectAttempt;
+	uint64_t reconnectGeneration;
 
 	internal_context_t *context;
 
 	HumbleNetState()
 	:  myPeerId(0)
+	, reconnectPeerId(0)
+	, pendingAliasUnregisterAll(false)
 	, webRTCSupported(false)
+	, signalingReconnectEnabled(false)
+	, reconnectScheduled(false)
+	, reconnectAttempt(0)
+	, reconnectGeneration(0)
 	, context(NULL)
 	{
 	}

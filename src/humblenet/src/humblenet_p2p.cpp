@@ -39,6 +39,16 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 	humbleNetState.gameToken = game_token;
 	humbleNetState.gameSecret = game_secret;
 	humbleNetState.reconnectToken = "";
+	humbleNetState.myPeerId = 0;
+	humbleNetState.reconnectPeerId = 0;
+	humbleNetState.reconnectAttempt = 0;
+	humbleNetState.reconnectScheduled = false;
+	++humbleNetState.reconnectGeneration;
+	humbleNetState.signalingReconnectEnabled = true;
+	humbleNetState.registeredAliases.clear();
+	humbleNetState.pendingAliasRegistrations.clear();
+	humbleNetState.pendingAliasUnregistrations.clear();
+	humbleNetState.pendingAliasUnregisterAll = false;
 
 	if( auth_token ) {
 		humbleNetState.authToken = auth_token;
@@ -65,12 +75,22 @@ void humblenet_p2p_shutdown() {
 
 	// disconnect from signaling server, shutdown all p2p connections, etc.
 	initialized = false;
+	humbleNetState.signalingReconnectEnabled = false;
+	humbleNetState.reconnectScheduled = false;
+	++humbleNetState.reconnectGeneration;
 
 	// drop the server
 	if( humbleNetState.p2pConn ) {
 		humbleNetState.p2pConn->disconnect();
 		humbleNetState.p2pConn.reset();
 	}
+	humbleNetState.myPeerId = 0;
+	humbleNetState.reconnectPeerId = 0;
+	humbleNetState.reconnectToken.clear();
+	humbleNetState.registeredAliases.clear();
+	humbleNetState.pendingAliasRegistrations.clear();
+	humbleNetState.pendingAliasUnregistrations.clear();
+	humbleNetState.pendingAliasUnregisterAll = false;
 	internal_deinit(humbleNetState.context);
 	humbleNetState.context = NULL;
 }

@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
+#include <chrono>
 
 #ifdef _WIN32
 #	define WIN32_LEAN_AND_MEAN
@@ -37,6 +38,13 @@
 using namespace humblenet;
 
 namespace humblenet {
+	namespace {
+		uint64_t nowMs()
+		{
+			return std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now().time_since_epoch()).count();
+		}
+	}
 
 	ha_bool sendP2PMessage(P2PSignalConnection *conn, const uint8_t *buff, size_t length) {
 		conn->sendMessage(buff, length);
@@ -78,6 +86,9 @@ int callback_humblepeer(struct lws *wsi
 				  , enum lws_callback_reasons reason
 				  , void *user, void *in, size_t len) {
 
+	if (peerServer && peerServer->catalog) {
+		peerServer->catalog->expireSessions(nowMs());
+	}
 
 	switch (reason) {
 	case LWS_CALLBACK_HTTP:
@@ -178,19 +189,20 @@ int callback_humblepeer(struct lws *wsi
 			P2PSignalConnection *conn = it->second.get();
 			assert(conn != NULL);
 
+			conn->state = Closed;
 			LOG_INFO("Closing connection to peer %u (%s)\n", conn->peerId, conn->url.c_str());
 
-			if (conn->peerId != 0) {
-				// remove it from list of peers
-				assert(conn->catalog != NULL);
-				auto it2 = conn->catalog->peers.find(conn->peerId);
-				// if peerId is valid (nonzero)
-				// this MUST exist
-				assert(it2 != conn->catalog->peers.end());
-				conn->catalog->peers.erase(it2);
-
-				// remove any aliases to this peer
-				conn->catalog->erasePeerAliases(conn->peerId);
+			if (conn->session != NULL && conn->catalog != NULL) {
+				PeerId peerId = conn->session->peerId;
+				if (conn->peerInitiatedClose) {
+					conn->catalog->destroySession(peerId);
+					LOG_INFO("Destroyed signaling session for peer %u after clean websocket close\n", peerId);
+				} else {
+					conn->catalog->detachSession(conn->session, nowMs() + Catalog::kReconnectGracePeriodMs);
+					LOG_INFO("Detached signaling session for peer %u; resume token remains valid for %llu ms\n",
+						peerId, static_cast<unsigned long long>(Catalog::kReconnectGracePeriodMs));
+				}
+				conn->session = NULL;
 			}
 
 			// and finally remove from list of signal connections
@@ -198,6 +210,15 @@ int callback_humblepeer(struct lws *wsi
 			peerServer->signalConnections.erase(it);
 		}
 
+		break;
+
+	case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
+		{
+			auto it = peerServer->signalConnections.find(wsi);
+			if (it != peerServer->signalConnections.end()) {
+				it->second->peerInitiatedClose = true;
+			}
+		}
 		break;
 
 	case LWS_CALLBACK_RECEIVE:
@@ -238,6 +259,9 @@ int callback_humblepeer(struct lws *wsi
 			if (conn->wsi != wsi) {
 				// this connection is not the one currently active in humbleNetState.
 				// this one must be obsolete, close it
+				return -1;
+			}
+			if (conn->state == Closing || conn->state == Closed) {
 				return -1;
 			}
 

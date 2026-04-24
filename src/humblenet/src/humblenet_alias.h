@@ -65,5 +65,6 @@ void internal_alias_remove_connection( Connection* conn );
  *
  */
 void internal_alias_resolved_to( const std::string& alias, PeerId peer );
+bool internal_alias_handle_registration_resolution(const std::string& alias, PeerId peer);
 
 #endif // HUMBLENET_ALIAS_H
