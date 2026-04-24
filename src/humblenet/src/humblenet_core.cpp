@@ -209,7 +209,7 @@ uint64_t sys_milliseconds (void)
 void signal();
 
 void blacklist_peer( PeerId peer ) {
-	humbleNetState.peerBlacklist.insert( std::make_pair( peer, sys_milliseconds() + 5000 ) );
+	humbleNetState.peerBlacklist.insert( std::make_pair( peer, sys_milliseconds() + 1000 ) );
 }
 
 /*
@@ -224,7 +224,7 @@ bool is_peer_blacklisted( PeerId peer_id ) {
 	
 	if( it->second <= sys_milliseconds() ) {
 		humbleNetState.peerBlacklist.erase(it);
-		return true;
+		return false;
 	}
 
 	return true;
