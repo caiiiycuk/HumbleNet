@@ -222,8 +222,8 @@ All settings are in the `.env` file:
 | `ACME_PORT`        | Host port for ACME challenges. Set to a non-standard port (e.g. `9080`) when proxying through a host nginx.                          | `80`         |
 | `RELAY_PORT_MIN`   | Start of UDP relay port range                                                                                                        | `49152`      |
 | `RELAY_PORT_MAX`   | End of UDP relay port range                                                                                                          | `65535`      |
-| `TOTAL_QUOTA`      | Maximum concurrent TURN allocations across the server                                                                                | `600`        |
-| `USER_QUOTA`       | Maximum concurrent TURN allocations for one REST username                                                                            | `600`        |
+| `TOTAL_QUOTA`      | Maximum concurrent TURN allocations across the server                                                                                | `9000`        |
+| `USER_QUOTA`       | Maximum concurrent TURN allocations for one REST username                                                                            | `128`        |
 | `PUBLIC_IP`        | VPS public IP (auto-detected if empty)                                                                                               | *(auto)*     |
 | `PUBLISH_URL`      | URL to POST iceServers + traffic JSON to (empty = disabled)                                                                          | *(empty)*    |
 | `PUBLISH_INTERVAL` | Seconds between iceServers publications                                                                                              | `60`         |
