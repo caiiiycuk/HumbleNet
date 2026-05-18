@@ -227,6 +227,8 @@ All settings are in the `.env` file:
 | `PUBLIC_IP`        | VPS public IP (auto-detected if empty)                                                                                               | *(auto)*     |
 | `PUBLISH_URL`      | URL to POST iceServers + traffic JSON to (empty = disabled)                                                                          | *(empty)*    |
 | `PUBLISH_INTERVAL` | Seconds between iceServers publications                                                                                              | `60`         |
+| `PUBLISH_LABEL`    | Optional label added to published JSON for backend-side identification                                                               | *(empty)*    |
+| `PUBLISH_MAX_TRAFFIC_GB` | Optional maximum traffic value in GB added to published JSON                                                                    | *(empty)*    |
 
 
 ### Published JSON format
@@ -246,11 +248,15 @@ When `PUBLISH_URL` is set, the entrypoint POSTs the following JSON every `PUBLIS
   "traffic": {
     "dailyBytes": 123456789,
     "monthlyBytes": 9876543210
-  }
+  },
+  "label": "eu-west-1",
+  "maxTrafficGb": 1024
 }
 ```
 
 The `traffic` object reports total bytes relayed by coturn (received + sent), tracked via coturn's built-in prometheus metrics. Counters reset at midnight (daily) and on the 1st of each month. Stats persist across container restarts via the `coturn-data` volume.
+
+`label` and `maxTrafficGb` are optional additive fields. They are included only when `PUBLISH_LABEL` and `PUBLISH_MAX_TRAFFIC_GB` are set, so installations that leave both variables empty keep publishing the legacy JSON shape unchanged.
 
 The published `turnSecret` is intended for a trusted backend. Do not cache and serve the same generated `username`/`credential` pair to all browsers unless `USER_QUOTA` is sized for all concurrent allocations using that shared username. The safer production pattern is to mint a fresh REST username per client/session request.
 

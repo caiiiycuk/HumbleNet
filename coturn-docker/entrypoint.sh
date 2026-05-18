@@ -113,6 +113,13 @@ update_traffic() {
 
 # ── Publish iceServers JSON to PUBLISH_URL every PUBLISH_INTERVAL seconds ─
 
+json_escape() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '%s' "$value"
+}
+
 publish_ice() {
     local ttl="${CREDENTIAL_TTL:-300}"
     echo "ice-publisher: -> $PUBLISH_URL every ${PUBLISH_INTERVAL}s"
@@ -124,10 +131,21 @@ publish_ice() {
         expires=$((now + ttl))
         username="${expires}:publisher:${now}"
         cred=$(printf '%s' "$username" | openssl dgst -sha1 -hmac "$TURN_SECRET" -binary | base64)
-        local code
+        local code publish_metadata
+        publish_metadata=""
+        if [ -n "$PUBLISH_LABEL" ]; then
+            publish_metadata="${publish_metadata},\"label\":\"$(json_escape "$PUBLISH_LABEL")\""
+        fi
+        if [ -n "$PUBLISH_MAX_TRAFFIC_GB" ]; then
+            if [[ "$PUBLISH_MAX_TRAFFIC_GB" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+                publish_metadata="${publish_metadata},\"maxTrafficGb\":${PUBLISH_MAX_TRAFFIC_GB}"
+            else
+                echo "ice-publisher: invalid PUBLISH_MAX_TRAFFIC_GB=$PUBLISH_MAX_TRAFFIC_GB, omitting maxTrafficGb" >&2
+            fi
+        fi
         code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 -X POST \
             -H "Content-Type: application/json" \
-            -d "{\"domain\":\"${DOMAIN}\",\"turnSecret\":\"${TURN_SECRET}\",\"iceServers\":[{\"urls\":[\"stun:${DOMAIN}:3478\"]},{\"urls\":[\"turn:${DOMAIN}:3478?transport=udp\",\"turn:${DOMAIN}:3478?transport=tcp\",\"turns:${DOMAIN}:5349?transport=tcp\"],\"username\":\"${username}\",\"credential\":\"${cred}\"}],\"traffic\":{\"dailyBytes\":${DAILY_BYTES},\"monthlyBytes\":${MONTHLY_BYTES}}}" \
+            -d "{\"domain\":\"${DOMAIN}\",\"turnSecret\":\"${TURN_SECRET}\",\"iceServers\":[{\"urls\":[\"stun:${DOMAIN}:3478\"]},{\"urls\":[\"turn:${DOMAIN}:3478?transport=udp\",\"turn:${DOMAIN}:3478?transport=tcp\",\"turns:${DOMAIN}:5349?transport=tcp\"],\"username\":\"${username}\",\"credential\":\"${cred}\"}],\"traffic\":{\"dailyBytes\":${DAILY_BYTES},\"monthlyBytes\":${MONTHLY_BYTES}}${publish_metadata}}" \
             "$PUBLISH_URL" 2>&1) || true
         echo "ice-publisher: user=$username daily=${DAILY_BYTES}B monthly=${MONTHLY_BYTES}B -> HTTP $code"
         sleep "${PUBLISH_INTERVAL:-60}"
