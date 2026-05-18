@@ -54,6 +54,10 @@ jobs:
         test -f ${{github.workspace}}/build/peer-server.bin.x86_64
         test -f ${{github.workspace}}/build/libhumblenet.so
         test -f ${{github.workspace}}/build/libhumblenet_static.a
+        test -f ${{github.workspace}}/build/humblenet_asmjs_amalgam.cpp
+        test -f ${{github.workspace}}/src/humblenet/include/humblenet.h
+        test -f ${{github.workspace}}/src/humblenet/include/humblenet_p2p.h
+        test -f ${{github.workspace}}/src/humblenet/include/humblenet_socket.h
 
     - name: Upload WebRTC-NET bundle
       uses: actions/upload-artifact@v4
@@ -64,3 +68,5 @@ jobs:
           build/peer-server.bin.x86_64
           build/libhumblenet.so
           build/libhumblenet_static.a
+          build/humblenet_asmjs_amalgam.cpp
+          src/humblenet/include/*.h
