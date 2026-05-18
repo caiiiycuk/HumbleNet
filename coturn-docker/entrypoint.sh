@@ -136,6 +136,9 @@ publish_ice() {
         if [ -n "$PUBLISH_LABEL" ]; then
             publish_metadata="${publish_metadata},\"label\":\"$(json_escape "$PUBLISH_LABEL")\""
         fi
+        if [ -n "$PUBLISH_FLAG" ]; then
+            publish_metadata="${publish_metadata},\"flag\":\"$(json_escape "$PUBLISH_FLAG")\""
+        fi
         if [ -n "$PUBLISH_MAX_TRAFFIC_GB" ]; then
             if [[ "$PUBLISH_MAX_TRAFFIC_GB" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
                 publish_metadata="${publish_metadata},\"maxTrafficGb\":${PUBLISH_MAX_TRAFFIC_GB}"
