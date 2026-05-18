@@ -1,7 +1,8 @@
 WebRTC-NET
 ==========
 
-[![WebRTC-NET Linux](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml/badge.svg)](https://github.com/caiiiycuk/HumbleNet/actions/workflows/humblenet-linux.yml)
+[![WebRTC-NET OpenSSL Linux](https://github.com/caiiiycuk/WebRTC-NET/actions/workflows/humblenet-openssl-linux.yml/badge.svg)](https://github.com/caiiiycuk/WebRTC-NET/actions/workflows/humblenet-openssl-linux.yml)
+[![WebRTC-NET BoringSSL Linux](https://github.com/caiiiycuk/WebRTC-NET/actions/workflows/humblenet-boringssl-linux.yml/badge.svg)](https://github.com/caiiiycuk/WebRTC-NET/actions/workflows/humblenet-boringssl-linux.yml)
 
 WebRTC-NET is a cross platform networking library that utilizes WebRTC and WebSockets to handle network communication.
 
