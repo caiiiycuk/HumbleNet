@@ -262,8 +262,17 @@ namespace humblenet {
 				auto existing = catalog->aliases.find( alias->c_str() );
 
 				if( existing != catalog->aliases.end() && existing->second != peerId ) {
-					LOG_INFO("Rejecting peer %u's request to register alias '%s' which is already registered to peer %u\n", peerId, alias->c_str(), existing->second );
+					auto ownerSessionIt = catalog->sessions.find(existing->second);
+					bool ownerDisconnected = ownerSessionIt != catalog->sessions.end() && ownerSessionIt->second->connection == NULL;
+
+					if (ownerDisconnected) {
+						LOG_INFO("Alias '%s' was registered to disconnected peer %u; reassigning to peer %u\n", alias->c_str(), existing->second, peerId );
+						ownerSessionIt->second->aliases.erase(alias->c_str());
+						catalog->registerAlias(session, alias->c_str());
+					} else {
+						LOG_INFO("Rejecting peer %u's request to register alias '%s' which is already registered to peer %u\n", peerId, alias->c_str(), existing->second );
 	#pragma message ("TODO implement registration failure")
+					}
 				} else {
 					catalog->registerAlias(session, alias->c_str());
 					LOG_INFO("Registering alias '%s' to peer %u\n", alias->c_str(), peerId );
