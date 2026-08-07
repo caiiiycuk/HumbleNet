@@ -41,13 +41,21 @@ start_turnserver() {
     TURNSERVER_PID=$!
 }
 
-# Watch for cert renewal (certbot deploy-hook touches this file)
+# Watch for cert renewal by polling fullchain.pem mtime.
+# The certbot-certs volume is mounted read-only here, so we must not rely on
+# deleting a flag file — instead we detect that certbot rewrote the cert.
 watch_certs() {
+    local cert="$CERT_DIR/fullchain.pem"
+    local last_mtime=""
+    [ -f "$cert" ] && last_mtime=$(stat -c %Y "$cert" 2>/dev/null || echo "")
     while true; do
         sleep 60
-        [ -f /etc/letsencrypt/renewed ] || continue
-        rm -f /etc/letsencrypt/renewed
-        echo "Certificate renewed — restarting turnserver..."
+        [ -f "$cert" ] || continue
+        local mtime
+        mtime=$(stat -c %Y "$cert" 2>/dev/null || echo "")
+        [ -n "$mtime" ] && [ "$mtime" != "$last_mtime" ] || continue
+        last_mtime="$mtime"
+        echo "Certificate changed — restarting turnserver..."
         generate_config
         touch "$COTURN_RESTART_EXPECTED"
         kill -TERM "$(cat /var/run/turnserver.pid 2>/dev/null)" 2>/dev/null || true

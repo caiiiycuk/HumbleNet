@@ -8,8 +8,8 @@ PROJECT(humblenet)
 
 IF(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT(EMSCRIPTEN))
 	#    asan
-	add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
-	add_link_options(-fsanitize=address)
+    #	add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    #	add_link_options(-fsanitize=address)
 	#    ubsan
 	#    add_compile_options(-fsanitize=undefined -fno-sanitize=alignment)
 	#    add_link_options(-fsanitize=undefined)

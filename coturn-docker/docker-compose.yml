@@ -13,6 +13,11 @@ services:
     ports:
       - "${ACME_PORT:-80}:80"
       - "8000:8000"
+    # Reload nginx periodically so it picks up renewed certificates.
+    # Without this, nginx keeps serving the cert it loaded at startup until the
+    # container is recreated — and that in-memory cert eventually expires
+    # (ERR_CERT_DATE_INVALID) even though certbot already renewed it on disk.
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"
     volumes:
       - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./nginx/ping.html:/usr/share/nginx/html/ping.html:ro

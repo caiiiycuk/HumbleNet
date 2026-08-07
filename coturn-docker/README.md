@@ -471,7 +471,10 @@ Open `https://your-domain:8000/` in a browser for an interactive test that measu
 
 ## Certificate renewal
 
-Certificates renew automatically every 12 hours via the certbot service. On successful renewal, coturn is restarted to pick up the new certificates.
+Certificates renew automatically every 12 hours via the certbot service. Both services pick up the renewed certificate on their own, without a manual step:
+
+- **coturn** polls the certificate's modification time and restarts `turnserver` when it changes (the `certbot-certs` volume is read-only inside coturn, so it cannot rely on a flag file).
+- **nginx** reloads itself every 6 hours, so it never keeps serving a stale in-memory certificate (which is what causes `ERR_CERT_DATE_INVALID` on `:8000` long after the cert was actually renewed on disk).
 
 To trigger a manual renewal:
 
