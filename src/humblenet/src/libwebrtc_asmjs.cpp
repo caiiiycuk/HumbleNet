@@ -41,7 +41,10 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 
 			connection.destroy = this.destroy;
 
-			connection.ondatachannel = this.on_datachannel;
+			// Keep bridge ownership explicit; callback receivers are not native socket state.
+			connection.ondatachannel = function(event) {
+				libwebrtc.on_datachannel(connection, event);
+			};
 			connection.onicecandidate = this.on_candidate;
 			connection.onsignalingstatechange = this.on_signalstatechange;
 			connection.oniceconnectionstatechange = this.on_icestatechange;
@@ -155,13 +158,21 @@ struct libwebrtc_context* libwebrtc_create_context( lwrtc_callback_function call
 			stackRestore(stack);
 			this.destroy();
 		};
-		libwebrtc.on_datachannel = function(event){
+		libwebrtc.on_datachannel = function(connection, event){
 			Module.out("datachannel");
-			var channel = event.channel;
+			var channel = event && event.channel;
+			var socket = connection && connection.user_data;
 
-			channel.parent = this;
+			if (!connection || !channel || socket == null || socket === 0) {
+				if (channel && channel.readyState !== 'closed') {
+					channel.close();
+				}
+				throw new Error("HumbleNet: incoming data channel has no native socket context");
+			}
+
+			channel.parent = connection;
 			// use the parents data initially
-			channel.user_data = this.user_data;
+			channel.user_data = socket;
 			channel.binaryType = 'arraybuffer';
 
 			channel.onopen = libwebrtc.on_channel_accept;
