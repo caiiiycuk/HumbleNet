@@ -7,6 +7,7 @@
 
 #include <cassert>
 
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <cstring>
@@ -24,6 +25,16 @@
 
 #if defined(EMSCRIPTEN)
 	#include <emscripten/emscripten.h>
+
+	EM_JS(char*, humblenet_get_net_config_ice_servers_json, (), {
+		const scope = typeof window !== "undefined" ? window : globalThis;
+		if(!scope.netConfig || typeof scope.netConfig.iceServers === "undefined") {
+			return 0;
+		}
+
+		const json = JSON.stringify(scope.netConfig.iceServers);
+		return typeof json === "string" ? stringToNewUTF8(json) : 0;
+	});
 #endif
 
 #include "humblepeer.h"
@@ -156,6 +167,80 @@ bool parse_ice_servers_json(const char* json,
 	json_value_free(root);
 	return true;
 }
+
+bool has_turn_server(const std::vector<humblenet::ICEServer>& servers) {
+	return std::any_of(servers.begin(), servers.end(), [](const humblenet::ICEServer& server) {
+		return server.type == humblenet::ICEServerType::TURNServer;
+	});
+}
+
+void abort_invalid_ice_configuration(const std::string& reason) {
+	std::fprintf(stderr,
+		"\n"
+		"########################################################################\n"
+		"# HUMBLENET FATAL: INVALID ICE SERVER CONFIGURATION                    #\n"
+		"########################################################################\n"
+		"%s\n"
+		"HumbleNet requires at least one STUN or TURN server before P2P startup.\n"
+		"Native: call humblenet_set_iceservers() before humblenet_p2p_init().\n"
+		"Web: call that API or define window.netConfig.iceServers before startup.\n"
+		"Execution is being terminated.\n"
+		"########################################################################\n\n",
+		reason.c_str());
+	std::fflush(stderr);
+	std::abort();
+}
+
+void print_missing_turn_server_warning() {
+	std::fprintf(stderr,
+		"\n"
+		"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+		"! HUMBLENET WARNING: ICE CONFIGURATION CONTAINS NO TURN SERVER         !\n"
+		"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+		"Only direct/STUN connectivity is available. Connections will fail for\n"
+		"peers behind restrictive NATs, symmetric NATs, or restrictive firewalls.\n"
+		"Add at least one turn: or turns: URL for reliable WebRTC connectivity.\n"
+		"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
+	std::fflush(stderr);
+}
+
+void warn_if_turn_server_is_missing(const std::vector<humblenet::ICEServer>& servers) {
+	if(!has_turn_server(servers)) {
+		print_missing_turn_server_warning();
+	}
+}
+
+void validate_ice_configuration(const std::vector<humblenet::ICEServer>& servers) {
+	if(servers.empty()) {
+		abort_invalid_ice_configuration("The final ICE server list is empty.");
+	}
+
+	warn_if_turn_server_is_missing(servers);
+}
+
+#if defined(EMSCRIPTEN)
+void apply_net_config_ice_servers_fallback() {
+	if(humbleNetState.iceServersConfiguredExplicitly) {
+		return;
+	}
+
+	char* json = humblenet_get_net_config_ice_servers_json();
+	if(json == nullptr) {
+		return;
+	}
+
+	std::vector<humblenet::ICEServer> parsedServers;
+	std::string error;
+	const bool parsed = parse_ice_servers_json(json, parsedServers, error);
+	std::free(json);
+
+	if(!parsed) {
+		abort_invalid_ice_configuration("Unable to use window.netConfig.iceServers: " + error);
+	}
+
+	humbleNetState.configuredIceServers.swap(parsedServers);
+}
+#endif
 
 void apply_configured_ice_servers_locked() {
 	if(humbleNetState.context == nullptr) {
@@ -686,23 +771,43 @@ ha_bool HUMBLENET_CALL humblenet_init() {
 }
 
 ha_bool HUMBLENET_CALL humblenet_set_iceservers(const char* json) {
+	{
+		HUMBLENET_GUARD();
+		humbleNetState.iceServersConfiguredExplicitly = true;
+	}
+
 	std::vector<humblenet::ICEServer> parsedServers;
 	std::string error;
 	if(!parse_ice_servers_json(json, parsedServers, error)) {
 		humblenet_set_error(error.c_str());
 		return false;
 	}
+	if(parsedServers.empty()) {
+		abort_invalid_ice_configuration("humblenet_set_iceservers() received an empty ICE server list.");
+	}
+	const bool turnServerMissing = !has_turn_server(parsedServers);
 
+	bool contextExists = false;
 	{
 		HUMBLENET_GUARD();
 		humbleNetState.configuredIceServers.swap(parsedServers);
 		apply_configured_ice_servers_locked();
+		contextExists = humbleNetState.context != nullptr;
+	}
+
+	if(contextExists && turnServerMissing) {
+		print_missing_turn_server_warning();
 	}
 
 	return true;
 }
 
 ha_bool internal_p2p_register_protocol() {
+	#if defined(EMSCRIPTEN)
+	apply_net_config_ice_servers_fallback();
+	#endif
+	validate_ice_configuration(humbleNetState.configuredIceServers);
+
 	internal_callbacks_t callbacks;
 
 	memset(&callbacks, 0, sizeof(callbacks));

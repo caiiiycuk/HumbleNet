@@ -80,9 +80,12 @@ HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_init();
 
 /*
  * Set or replace the list of ICE servers used for new WebRTC connections.
- * Native clients must configure ICE servers explicitly with this API.
+ * Native clients must configure at least one ICE server explicitly with this API.
+ * Web clients fall back to window.netConfig.iceServers when this API has not
+ * been called before humblenet_p2p_init().
  * peer-server is used for signaling only and does not provide ICE settings.
- * Pass NULL, an empty string, or [] to clear the current configuration.
+ * An empty configuration is fatal. A configuration without TURN is accepted,
+ * but HumbleNet prints a prominent warning because some peers will be unreachable.
  */
 HUMBLENET_API ha_bool HUMBLENET_CALL humblenet_set_iceservers(const char* json);
 

@@ -87,6 +87,11 @@ window.netConfig = {
 Native clients must call `humblenet_set_iceservers()` before establishing
 WebRTC/P2P connections.
 
+P2P startup aborts when the resulting ICE server list is empty. Web builds
+fall back to `window.netConfig.iceServers` only when
+`humblenet_set_iceservers()` was not called explicitly. A configuration with
+STUN but no TURN is accepted with a prominent warning.
+
 Update supervisor and start:
 
 ```

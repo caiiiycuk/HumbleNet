@@ -84,6 +84,12 @@ Native clients must provide their own ICE server list with
 `peer-server` is used for peer matching and signaling only, so STUN/TURN
 configuration must be supplied by the application.
 
+HumbleNet aborts P2P startup when the final ICE server list is empty. Web
+builds use `window.netConfig.iceServers` only when
+`humblenet_set_iceservers()` was not called explicitly. A STUN-only list is
+accepted, but produces a prominent warning because reliable connectivity
+requires at least one TURN server.
+
 For Linux production deployments, the intended backend is the external
 Chromium WebRTC implementation documented in [README.chromium.md](/home/caiiiycuk/js-dos/HumbleNet/README.chromium.md).
 That is the path that should be validated for real NAT traversal behavior.

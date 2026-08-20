@@ -97,6 +97,7 @@ typedef struct HumbleNetState {
 		std::string authToken;
 		std::string reconnectToken;
 		std::vector<humblenet::ICEServer> configuredIceServers;
+		bool iceServersConfiguredExplicitly;
 		std::unordered_set<std::string> registeredAliases;
 		std::unordered_set<std::string> pendingAliasRegistrations;
 		std::unordered_set<std::string> pendingAliasUnregistrations;
@@ -113,6 +114,7 @@ typedef struct HumbleNetState {
 	HumbleNetState()
 	:  myPeerId(0)
 	, reconnectPeerId(0)
+	, iceServersConfiguredExplicitly(false)
 	, pendingAliasUnregisterAll(false)
 	, webRTCSupported(false)
 	, signalingReconnectEnabled(false)
