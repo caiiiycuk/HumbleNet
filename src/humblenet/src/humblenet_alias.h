@@ -29,6 +29,10 @@ PeerId internal_alias_lookup(const char* alias );
 
 bool internal_alias_query( const char* query, const std::function<void(std::vector<std::pair<std::string,PeerId>>)>& callback );
 void internal_alias_query_result( const char* query, std::vector<std::pair<std::string,PeerId>> matches);
+std::vector<std::function<void(std::vector<std::pair<std::string,PeerId>>)>> internal_alias_cancel_queries();
+void internal_alias_on_signaling_reset();
+void internal_alias_on_signaling_ready(bool freshSession, PeerId previousPeerId);
+void internal_alias_retry_deferred_work();
 
 /**
  * Is this peer id a vritual peer id
@@ -65,6 +69,6 @@ void internal_alias_remove_connection( Connection* conn );
  *
  */
 void internal_alias_resolved_to( const std::string& alias, PeerId peer );
-bool internal_alias_handle_registration_resolution(const std::string& alias, PeerId peer);
+void internal_alias_handle_resolution(const std::string& alias, PeerId peer);
 
 #endif // HUMBLENET_ALIAS_H

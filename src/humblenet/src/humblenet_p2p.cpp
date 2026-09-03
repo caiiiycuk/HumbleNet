@@ -44,10 +44,20 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 	humbleNetState.reconnectScheduled = false;
 	++humbleNetState.reconnectGeneration;
 	humbleNetState.signalingReconnectEnabled = true;
-	humbleNetState.registeredAliases.clear();
 	humbleNetState.pendingAliasRegistrations.clear();
 	humbleNetState.pendingAliasUnregistrations.clear();
-	humbleNetState.pendingAliasUnregisterAll = false;
+	humbleNetState.oldSessionAliasOwners.clear();
+	humbleNetState.blockedAliasAcquisitions.clear();
+	humbleNetState.aliasWorkDeferred = false;
+	humbleNetState.desiredAliases.clear();
+	humbleNetState.sessionAliases.clear();
+	humbleNetState.confirmedAliases.clear();
+	humbleNetState.aliasIntentRevision.clear();
+	humbleNetState.aliasLookups.clear();
+	humbleNetState.aliasLookupTimeoutScheduled = false;
+	humbleNetState.aliasLookupTimerDeadlineMs = 0;
+	++humbleNetState.aliasLookupTimerGeneration;
+	humbleNetState.pendingAliasQueryOut.clear();
 
 	if( auth_token ) {
 		humbleNetState.authToken = auth_token;
@@ -70,28 +80,50 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
  * Shut down the networking library
  */
 void humblenet_p2p_shutdown() {
-	if (!initialized) {
-		return;
+	internal_context_t* context = NULL;
+	std::vector<std::function<void(std::vector<std::pair<std::string,PeerId>>)>> aliasQueryCallbacks;
+
+	{
+		HUMBLENET_GUARD();
+
+		if (!initialized) {
+			return;
+		}
+
+		LOG("humblenet_p2p_shutdown\n");
+
+		initialized = false;
+		humbleNetState.signalingReconnectEnabled = false;
+		humbleNetState.reconnectScheduled = false;
+		++humbleNetState.reconnectGeneration;
+		context = humbleNetState.context;
+		humbleNetState.context = NULL;
 	}
 
-	LOG("humblenet_p2p_shutdown\n");
-
-	// disconnect from signaling server, shutdown all p2p connections, etc.
-	initialized = false;
-	humbleNetState.signalingReconnectEnabled = false;
-	humbleNetState.reconnectScheduled = false;
-	++humbleNetState.reconnectGeneration;
+	internal_deinit(context);
 
 	humbleNetState.myPeerId = 0;
 	humbleNetState.reconnectPeerId = 0;
 	humbleNetState.reconnectToken.clear();
-	humbleNetState.registeredAliases.clear();
 	humbleNetState.pendingAliasRegistrations.clear();
 	humbleNetState.pendingAliasUnregistrations.clear();
-	humbleNetState.pendingAliasUnregisterAll = false;
-	internal_deinit(humbleNetState.context);
-	humbleNetState.context = NULL;
+	humbleNetState.oldSessionAliasOwners.clear();
+	humbleNetState.blockedAliasAcquisitions.clear();
+	humbleNetState.aliasWorkDeferred = false;
+	humbleNetState.desiredAliases.clear();
+	humbleNetState.sessionAliases.clear();
+	humbleNetState.confirmedAliases.clear();
+	humbleNetState.aliasIntentRevision.clear();
+	humbleNetState.aliasLookups.clear();
+	humbleNetState.aliasLookupTimeoutScheduled = false;
+	humbleNetState.aliasLookupTimerDeadlineMs = 0;
+	++humbleNetState.aliasLookupTimerGeneration;
 	humbleNetState.p2pConn.reset();
+	aliasQueryCallbacks = internal_alias_cancel_queries();
+
+	for (const auto& callback : aliasQueryCallbacks) {
+		callback({});
+	}
 }
 
 /*

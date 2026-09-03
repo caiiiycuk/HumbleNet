@@ -688,6 +688,24 @@ void internal_close_socket( internal_socket_t* socket ) {
 	}
 }
 
+void internal_abort_socket( internal_socket_t* socket ) {
+	if( socket->closing )
+		return;
+	else if( socket->wsi ) {
+		socket->closing = true;
+#ifndef EMSCRIPTEN
+		lws_set_timeout(socket->wsi, PENDING_TIMEOUT_USER_OK, LWS_TO_KILL_ASYNC);
+#else
+		lws_callback_on_writable(socket->wsi);
+#endif
+	} else if( socket->webrtc ) {
+		socket->closing = true;
+		libwebrtc_close_connection( socket->webrtc );
+	} else {
+		assert( "Destroyed socket passed to abort" == NULL );
+	}
+}
+
 int internal_write_socket(internal_socket_t* socket, const void *buf, int bufsize) {
 	if( socket->wsi ) {
 		// TODO: Should this buffer the data like the docuemntation states and only write on the writable callback ?

@@ -27,11 +27,18 @@ namespace humblenet {
                 internal_close_socket(wsi);
             wsi = NULL;
         }
+
+        void drop() {
+            if( wsi )
+                internal_abort_socket(wsi);
+            wsi = NULL;
+        }
     };
     
 	bool register_protocol( internal_context_t* context );
 }
 
 ha_bool humblenet_signaling_connect();
+void humblenet_signaling_force_reconnect(const char* reason);
 
 #endif // HUMBLENET_SIGNALING

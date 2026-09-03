@@ -71,13 +71,16 @@ EM_JS(void, aliasQueryEnd, (const char* query), {
 
 extern "C" void EMSCRIPTEN_KEEPALIVE queryAliases(const char* cquery) {
     char* query = strdup(cquery);
-    humblenet_p2p_alias_query(query, [query](std::vector<std::pair<std::string, PeerId>> matches) {
+    if (!humblenet_p2p_alias_query(query, [query](std::vector<std::pair<std::string, PeerId>> matches) {
         for (const auto& match : matches) {
             aliasQueryAdd(query, match.first.c_str(), match.second);
         }
         aliasQueryEnd(query);
         free(query);
-    });
+    })) {
+        aliasQueryEnd(query);
+        free(query);
+    }
 }
 
 extern "C" int EMSCRIPTEN_KEEPALIVE sendto(const void* message, uint32_t length, PeerId topeer, SendMode sendmode) {

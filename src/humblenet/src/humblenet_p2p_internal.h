@@ -9,7 +9,46 @@
 #include <memory>
 #include <deque>
 #include <functional>
+#include <unordered_map>
 #include <unordered_set>
+
+enum class AliasLookupPurpose {
+	OldSessionCheck,
+	Unregister,
+	Acquire,
+	Connect,
+};
+
+struct AliasLookupInFlight {
+	AliasLookupPurpose purpose;
+	uint64_t signalingGeneration;
+	uint64_t intentRevision;
+	uint64_t deadlineMs;
+
+	AliasLookupInFlight()
+	: purpose(AliasLookupPurpose::Acquire)
+	, signalingGeneration(0)
+	, intentRevision(0)
+	, deadlineMs(0)
+	{
+	}
+};
+
+enum class PendingUnregisterPhase {
+	InitialReadback,
+	Recovering,
+	RetryReadback,
+	Failed,
+};
+
+struct PendingUnregister {
+	PendingUnregisterPhase phase;
+
+	PendingUnregister()
+	: phase(PendingUnregisterPhase::InitialReadback)
+	{
+	}
+};
 
 // TODO: should have a way to disable this on release builds
 #define LOG printf
@@ -80,6 +119,18 @@ typedef struct HumbleNetState {
 	std::unordered_map<std::string, Connection *> pendingAliasConnectionsOut;
 
 	std::unordered_map<std::string, const std::function<void(std::vector<std::pair<std::string,PeerId>>)>> pendingAliasQueryOut;
+	std::unordered_set<std::string> desiredAliases;
+	std::unordered_set<std::string> blockedAliasAcquisitions;
+	std::unordered_set<std::string> sessionAliases;
+	std::unordered_set<std::string> confirmedAliases;
+	std::unordered_map<std::string, uint64_t> aliasIntentRevision;
+	std::unordered_map<std::string, AliasLookupInFlight> aliasLookups;
+	std::unordered_map<std::string, PendingUnregister> pendingAliasUnregistrations;
+	std::unordered_map<std::string, PeerId> oldSessionAliasOwners;
+	bool aliasWorkDeferred;
+	bool aliasLookupTimeoutScheduled;
+	uint64_t aliasLookupTimerDeadlineMs;
+	uintptr_t aliasLookupTimerGeneration;
 
 	// map of peers that are blacklisted, value is when they they were blacklisted
 	// incoming peers are added to this list when they are disconnected.
@@ -98,10 +149,7 @@ typedef struct HumbleNetState {
 		std::string reconnectToken;
 		std::vector<humblenet::ICEServer> configuredIceServers;
 		bool iceServersConfiguredExplicitly;
-		std::unordered_set<std::string> registeredAliases;
 		std::unordered_set<std::string> pendingAliasRegistrations;
-		std::unordered_set<std::string> pendingAliasUnregistrations;
-		bool pendingAliasUnregisterAll;
 
 	ha_bool webRTCSupported;
 	ha_bool signalingReconnectEnabled;
@@ -115,7 +163,10 @@ typedef struct HumbleNetState {
 	:  myPeerId(0)
 	, reconnectPeerId(0)
 	, iceServersConfiguredExplicitly(false)
-	, pendingAliasUnregisterAll(false)
+	, aliasWorkDeferred(false)
+	, aliasLookupTimeoutScheduled(false)
+	, aliasLookupTimerDeadlineMs(0)
+	, aliasLookupTimerGeneration(0)
 	, webRTCSupported(false)
 	, signalingReconnectEnabled(false)
 	, reconnectScheduled(false)
