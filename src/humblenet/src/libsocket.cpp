@@ -27,6 +27,12 @@
 // TODO: should have a way to disable this on release builds
 #define LOG printf
 
+#ifndef EMSCRIPTEN
+static const lws_retry_bo_t websocket_retry_policy = {
+	NULL, 0, 0, 30, 100, 0
+};
+#endif
+
 struct internal_socket_t {
 	bool owner;
 	bool closing;			// if this is set, ignore close attempts as the close process has already been initiated.
@@ -382,6 +388,9 @@ internal_context_t* internal_init(internal_callbacks_t* callbacks) {
 	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
 #else
 	info.options = 0;
+#endif
+#ifndef EMSCRIPTEN
+	info.retry_and_idle_policy = &websocket_retry_policy;
 #endif
 #if 0
 #if defined __APPLE__ || defined(__linux__)

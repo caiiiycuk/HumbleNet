@@ -17,6 +17,7 @@ enum class AliasLookupPurpose {
 	Unregister,
 	Acquire,
 	Connect,
+	Health,
 };
 
 struct AliasLookupInFlight {
@@ -127,10 +128,13 @@ typedef struct HumbleNetState {
 	std::unordered_map<std::string, AliasLookupInFlight> aliasLookups;
 	std::unordered_map<std::string, PendingUnregister> pendingAliasUnregistrations;
 	std::unordered_map<std::string, PeerId> oldSessionAliasOwners;
+	std::unordered_set<std::string> pendingAliasHealthChecks;
 	bool aliasWorkDeferred;
 	bool aliasLookupTimeoutScheduled;
 	uint64_t aliasLookupTimerDeadlineMs;
 	uintptr_t aliasLookupTimerGeneration;
+	bool aliasHealthCheckScheduled;
+	uintptr_t aliasHealthCheckGeneration;
 
 	// map of peers that are blacklisted, value is when they they were blacklisted
 	// incoming peers are added to this list when they are disconnected.
@@ -167,6 +171,8 @@ typedef struct HumbleNetState {
 	, aliasLookupTimeoutScheduled(false)
 	, aliasLookupTimerDeadlineMs(0)
 	, aliasLookupTimerGeneration(0)
+	, aliasHealthCheckScheduled(false)
+	, aliasHealthCheckGeneration(0)
 	, webRTCSupported(false)
 	, signalingReconnectEnabled(false)
 	, reconnectScheduled(false)

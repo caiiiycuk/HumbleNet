@@ -57,6 +57,9 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 	humbleNetState.aliasLookupTimeoutScheduled = false;
 	humbleNetState.aliasLookupTimerDeadlineMs = 0;
 	++humbleNetState.aliasLookupTimerGeneration;
+	humbleNetState.aliasHealthCheckScheduled = false;
+	++humbleNetState.aliasHealthCheckGeneration;
+	humbleNetState.pendingAliasHealthChecks.clear();
 	humbleNetState.pendingAliasQueryOut.clear();
 
 	if( auth_token ) {
@@ -96,6 +99,9 @@ void humblenet_p2p_shutdown() {
 		humbleNetState.signalingReconnectEnabled = false;
 		humbleNetState.reconnectScheduled = false;
 		++humbleNetState.reconnectGeneration;
+		humbleNetState.aliasHealthCheckScheduled = false;
+		++humbleNetState.aliasHealthCheckGeneration;
+		humbleNetState.pendingAliasHealthChecks.clear();
 		context = humbleNetState.context;
 		humbleNetState.context = NULL;
 	}

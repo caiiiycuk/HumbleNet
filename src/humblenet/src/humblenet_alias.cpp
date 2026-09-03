@@ -18,10 +18,13 @@ static std::string virtualName;
 
 namespace {
 	static const uint32_t kAliasLookupTimeoutMs = 10000;
+	static const uint32_t kAliasHealthIntervalMs = 30000;
 
 	void internal_alias_lookup_timeout(void*);
+	void internal_alias_health_check(void*);
 	void reconcile_alias_work(const std::string& alias);
 	void schedule_alias_lookup_timeout();
+	void schedule_alias_health_check();
 	bool request_alias_lookup(const std::string& alias, AliasLookupPurpose purpose);
 
 	bool signaling_ready()
@@ -37,6 +40,7 @@ namespace {
 
 	uint64_t bump_alias_revision(const std::string& alias)
 	{
+		humbleNetState.pendingAliasHealthChecks.erase(alias);
 		return ++humbleNetState.aliasIntentRevision[alias];
 	}
 
@@ -100,6 +104,22 @@ namespace {
 		LOG("Failed to schedule alias read-back lookup for \"%s\"\n", alias.c_str());
 	}
 
+	bool alias_needs_health(const std::string& alias)
+	{
+		return humbleNetState.desiredAliases.find(alias) != humbleNetState.desiredAliases.end() &&
+			humbleNetState.sessionAliases.find(alias) != humbleNetState.sessionAliases.end();
+	}
+
+	bool has_alias_health_work()
+	{
+		for (const auto& alias : humbleNetState.desiredAliases) {
+			if (alias_needs_health(alias)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	bool send_alias_register_once(const std::string& alias)
 	{
 		if (!signaling_ready() || !humblenet::sendAliasRegister(humbleNetState.p2pConn.get(), alias)) {
@@ -160,7 +180,8 @@ namespace {
 
 		if (humbleNetState.desiredAliases.find(alias) != humbleNetState.desiredAliases.end() &&
 			humbleNetState.blockedAliasAcquisitions.find(alias) == humbleNetState.blockedAliasAcquisitions.end() &&
-			humbleNetState.confirmedAliases.find(alias) == humbleNetState.confirmedAliases.end()) {
+			humbleNetState.confirmedAliases.find(alias) == humbleNetState.confirmedAliases.end() &&
+			humbleNetState.pendingAliasHealthChecks.find(alias) == humbleNetState.pendingAliasHealthChecks.end()) {
 			if (humbleNetState.sessionAliases.find(alias) == humbleNetState.sessionAliases.end() &&
 				humbleNetState.pendingAliasRegistrations.find(alias) == humbleNetState.pendingAliasRegistrations.end()) {
 				if (!send_alias_register_once(alias)) {
@@ -177,6 +198,18 @@ namespace {
 		if (humbleNetState.pendingAliasConnectionsOut.find(alias) !=
 			humbleNetState.pendingAliasConnectionsOut.end()) {
 			request_alias_lookup(alias, AliasLookupPurpose::Connect);
+			return;
+		}
+
+		if (humbleNetState.pendingAliasHealthChecks.find(alias) !=
+			humbleNetState.pendingAliasHealthChecks.end()) {
+			if (!request_alias_lookup(alias, AliasLookupPurpose::Health)) {
+				humbleNetState.pendingAliasHealthChecks.erase(alias);
+				humbleNetState.confirmedAliases.erase(alias);
+				humblenet_signaling_force_reconnect("alias health lookup send failed");
+				return;
+			}
+			humbleNetState.pendingAliasHealthChecks.erase(alias);
 		}
 	}
 
@@ -195,14 +228,69 @@ namespace {
 		for (auto it = humbleNetState.aliasLookups.begin(); it != humbleNetState.aliasLookups.end(); ++it) {
 			if (it->second.deadlineMs <= now) {
 				std::string alias = it->first;
+				AliasLookupInFlight lookup = it->second;
 				humbleNetState.aliasLookups.erase(it);
 				LOG("Alias lookup for \"%s\" timed out\n", alias.c_str());
+				if (lookup.purpose == AliasLookupPurpose::Health) {
+					humbleNetState.confirmedAliases.erase(alias);
+				}
 				humblenet_signaling_force_reconnect("alias lookup timed out");
 				return;
 			}
 		}
 
 		schedule_alias_lookup_timeout();
+	}
+
+	void schedule_alias_health_check()
+	{
+#ifndef EMSCRIPTEN
+		if (humbleNetState.aliasHealthCheckScheduled || !has_alias_health_work()) {
+			return;
+		}
+
+		humbleNetState.aliasHealthCheckScheduled = true;
+		uintptr_t generation = ++humbleNetState.aliasHealthCheckGeneration;
+		humblenet_timer(internal_alias_health_check, kAliasHealthIntervalMs,
+			reinterpret_cast<void*>(generation));
+#endif
+	}
+
+	void internal_alias_health_check(void* data)
+	{
+#ifdef EMSCRIPTEN
+		(void)data;
+		return;
+#else
+		HUMBLENET_GUARD();
+
+		uintptr_t generation = reinterpret_cast<uintptr_t>(data);
+		if (generation != humbleNetState.aliasHealthCheckGeneration) {
+			return;
+		}
+
+		humbleNetState.aliasHealthCheckScheduled = false;
+		if (!signaling_ready()) {
+			return;
+		}
+
+		std::vector<std::string> aliases;
+		for (const auto& alias : humbleNetState.desiredAliases) {
+			if (alias_needs_health(alias)) {
+				aliases.push_back(alias);
+			}
+		}
+
+		for (const auto& alias : aliases) {
+			humbleNetState.pendingAliasHealthChecks.insert(alias);
+			reconcile_alias_work(alias);
+			if (!signaling_ready()) {
+				return;
+			}
+		}
+
+		schedule_alias_health_check();
+#endif
 	}
 
 	std::vector<std::string> alias_snapshot()
@@ -300,6 +388,7 @@ namespace {
 			humbleNetState.pendingAliasRegistrations.erase(alias);
 			humbleNetState.sessionAliases.insert(alias);
 			humbleNetState.confirmedAliases.insert(alias);
+			schedule_alias_health_check();
 			LOG("Alias \"%s\" registration confirmed for peer %u\n", alias.c_str(), peer);
 			return;
 		}
@@ -324,6 +413,26 @@ namespace {
 		humbleNetState.pendingAliasRegistrations.erase(alias);
 		LOG("Alias \"%s\" registration rejected or unresolved (resolved to %u)\n", alias.c_str(), peer);
 	}
+
+	bool handle_health_resolution(const std::string& alias, PeerId peer)
+	{
+		if (peer == humbleNetState.myPeerId && peer != 0) {
+			humbleNetState.confirmedAliases.insert(alias);
+			schedule_alias_health_check();
+			return true;
+		}
+
+		humbleNetState.confirmedAliases.erase(alias);
+		if (peer == 0) {
+			LOG("Alias \"%s\" health lookup found no owner; not registering\n", alias.c_str());
+		} else {
+			LOG("Alias \"%s\" health lookup resolved to peer %u; not taking over\n",
+				alias.c_str(), peer);
+		}
+		schedule_alias_health_check();
+		return false;
+	}
+
 }
 
 ha_bool internal_alias_register( const char* name ) {
@@ -471,7 +580,10 @@ void internal_alias_on_signaling_reset() {
 	humbleNetState.aliasLookupTimeoutScheduled = false;
 	humbleNetState.aliasLookupTimerDeadlineMs = 0;
 	++humbleNetState.aliasLookupTimerGeneration;
+	humbleNetState.aliasHealthCheckScheduled = false;
+	++humbleNetState.aliasHealthCheckGeneration;
 	humbleNetState.pendingAliasRegistrations.clear();
+	humbleNetState.pendingAliasHealthChecks.clear();
 }
 
 void internal_alias_on_signaling_ready(bool freshSession, PeerId previousPeerId) {
@@ -496,6 +608,7 @@ void internal_alias_on_signaling_ready(bool freshSession, PeerId previousPeerId)
 	for (const auto& alias : aliases) {
 		reconcile_alias_work(alias);
 	}
+	schedule_alias_health_check();
 }
 
 void internal_alias_retry_deferred_work()
@@ -591,10 +704,26 @@ void internal_alias_handle_resolution(const std::string& alias, PeerId peer)
 		case AliasLookupPurpose::Acquire:
 			handle_acquire_resolution(alias, peer);
 			break;
-		case AliasLookupPurpose::Connect:
+		case AliasLookupPurpose::Connect: {
 			if (humbleNetState.pendingAliasConnectionsOut.find(alias) !=
 				humbleNetState.pendingAliasConnectionsOut.end()) {
 				internal_alias_resolved_to(alias, peer);
+			}
+			if (humbleNetState.pendingAliasHealthChecks.find(alias) ==
+				humbleNetState.pendingAliasHealthChecks.end() &&
+				humbleNetState.pendingAliasRegistrations.find(alias) ==
+				humbleNetState.pendingAliasRegistrations.end()) {
+				return;
+			}
+			break;
+		}
+		case AliasLookupPurpose::Health:
+			if (!handle_health_resolution(alias, peer)) {
+				if (humbleNetState.pendingAliasConnectionsOut.find(alias) !=
+					humbleNetState.pendingAliasConnectionsOut.end()) {
+					request_alias_lookup(alias, AliasLookupPurpose::Connect);
+				}
+				return;
 			}
 			break;
 	}
