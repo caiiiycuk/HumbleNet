@@ -58,6 +58,7 @@ void mutex_post(mutex_t* m) {
 #elif _POSIX_TIMEOUTS > 0
 
 #include <pthread.h>
+#include <time.h>
 
 #define mutex_t pthread_mutex_t
 void mutex_init(mutex_t* m) {
@@ -72,8 +73,16 @@ void mutex_init(mutex_t* m) {
 int mutex_timedlock(mutex_t* m, long ms ) {
 	struct timespec ts;
 
-	ts.tv_sec = ms / 1000;
-	ts.tv_nsec = 1000 * (ms % 1000);
+	if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
+		return errno;
+	}
+
+	ts.tv_sec += ms / 1000;
+	ts.tv_nsec += (ms % 1000) * 1000000L;
+	if (ts.tv_nsec >= 1000000000L) {
+		ts.tv_sec++;
+		ts.tv_nsec -= 1000000000L;
+	}
 
 	return pthread_mutex_timedlock( m, &ts );
 }
