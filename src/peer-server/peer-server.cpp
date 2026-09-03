@@ -47,13 +47,21 @@ namespace humblenet {
 	}
 
 	ha_bool sendP2PMessage(P2PSignalConnection *conn, const uint8_t *buff, size_t length) {
-		conn->sendMessage(buff, length);
+		if (conn == NULL) {
+			return false;
+		}
+		if (!conn->sendMessage(buff, length)) {
+			conn->peerServer->closeConnection(conn);
+			return false;
+		}
 		return true;
 	}
 
 }  // namespace humblenet
 
 static std::unique_ptr<Server> peerServer;
+
+static const size_t kMaxSignalingBytes = 1024 * 1024;
 
 struct LookupResponseState {
 	unsigned char body[LWS_PRE + 16 * 1024];
@@ -301,16 +309,24 @@ int callback_humblepeer(struct lws *wsi
 				return 0;
 			}
 
-			char *inBuf = reinterpret_cast<char *>(in);
-			it->second->recvBuf.insert(it->second->recvBuf.end(), inBuf, inBuf + len);
+			P2PSignalConnection *conn = it->second.get();
+			if (len > kMaxSignalingBytes ||
+				conn->recvBuf.size() > kMaxSignalingBytes - len) {
+				LOG_ERROR("Signaling message from \"%s\" is too large\n", conn->url.c_str());
+				conn->recvBuf.clear();
+				return -1;
+			}
+
+			uint8_t *inBuf = reinterpret_cast<uint8_t *>(in);
+			conn->recvBuf.insert(conn->recvBuf.end(), inBuf, inBuf + len);
 
 			// If we finished receiving a whole message
 			if (!lws_remaining_packet_payload(wsi) && lws_is_final_fragment(wsi)) {
 				// function which will parse recvBuf
-				ha_bool retval = parseMessage(it->second->recvBuf, p2pSignalProcess, it->second.get());
+				ha_bool retval = parseMessage(conn->recvBuf, p2pSignalProcess, conn);
 				if (!retval) {
 					// error in parsing, close connection
-					LOG_ERROR("Error in parsing message from \"%s\"\n", it->second->url.c_str());
+					LOG_ERROR("Error in parsing message from \"%s\"\n", conn->url.c_str());
 					return -1;
 				}
 			}
@@ -337,20 +353,17 @@ int callback_humblepeer(struct lws *wsi
 				return -1;
 			}
 
-			if (conn->sendBuf.empty()) {
-				// no data in sendBuf
+			if (conn->sendQueue.empty()) {
+				// no data in sendQueue
 				return 0;
 			}
 
-			size_t bufsize = conn->sendBuf.size();
+			std::vector<uint8_t>& message = conn->sendQueue.front();
+			size_t bufsize = message.size();
 			std::vector<unsigned char> sendbuf(LWS_SEND_BUFFER_PRE_PADDING + bufsize + LWS_SEND_BUFFER_POST_PADDING, 0);
-			memcpy(&sendbuf[LWS_SEND_BUFFER_PRE_PADDING], &conn->sendBuf[0], bufsize);
+			memcpy(&sendbuf[LWS_SEND_BUFFER_PRE_PADDING], message.data(), bufsize);
 			int retval = lws_write(conn->wsi, &sendbuf[LWS_SEND_BUFFER_PRE_PADDING], bufsize, LWS_WRITE_BINARY);
-			if (retval < 0) {
-				// error while sending, close the connection
-				return -1;
-			}
-			if (retval < bufsize) {
+			if (retval != static_cast<int>(bufsize)) {
 				// This should not happen. lws_write returns the number of bytes written but it includes the headers it adds to pre padding which we don't know about.
 				// So if it actually does a partial write there is no way for us to know how much of our data was sent and how much was headers, the API would be broken.
 				// The docs say it buffers data internally and sends it all, so this shouldn't happen.
@@ -359,7 +372,11 @@ int callback_humblepeer(struct lws *wsi
 			}
 
 			// successful write
-			conn->sendBuf.clear();
+			conn->queuedBytes -= message.size();
+			conn->sendQueue.pop_front();
+			if (!conn->sendQueue.empty()) {
+				lws_callback_on_writable(conn->wsi);
+			}
 		}
 		break;
 

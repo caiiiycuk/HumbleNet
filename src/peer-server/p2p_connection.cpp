@@ -1,6 +1,7 @@
 #include "p2p_connection.h"
 
 #include <chrono>
+#include <libwebsockets.h>
 
 #include "logging.h"
 #include "catalog.h"
@@ -11,6 +12,9 @@
 
 namespace humblenet {
 	namespace {
+		static const size_t kMaxSignalingBytes = 1024 * 1024;
+		static const size_t kMaxSignalingMessages = 1024;
+
 		uint64_t nowMs()
 		{
 			return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -377,12 +381,21 @@ namespace humblenet {
 	}
 
 
-	void P2PSignalConnection::sendMessage(const uint8_t *buff, size_t length) {
-		bool wasEmpty = this->sendBuf.empty();
-		this->sendBuf.insert(this->sendBuf.end(), buff, buff + length);
-		if (wasEmpty) {
-			peerServer->triggerWrite(this->wsi);
+	bool P2PSignalConnection::sendMessage(const uint8_t *buff, size_t length) {
+		if (this->wsi == NULL || this->state == Closing || this->state == Closed) {
+			return false;
 		}
+		if (length > kMaxSignalingBytes || this->queuedBytes > kMaxSignalingBytes - length ||
+			this->sendQueue.size() >= kMaxSignalingMessages) {
+			return false;
+		}
+		bool wasEmpty = this->sendQueue.empty();
+		this->sendQueue.emplace_back(buff, buff + length);
+		this->queuedBytes += length;
+		if (wasEmpty) {
+			lws_callback_on_writable(this->wsi);
+		}
+		return true;
 	}
 
 }

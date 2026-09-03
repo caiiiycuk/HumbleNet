@@ -24,6 +24,8 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 namespace {
 	static const uint32_t kReconnectBaseDelayMs = 500;
 	static const uint32_t kReconnectMaxDelayMs = 30000;
+	static const size_t kMaxSignalingBytes = 1024 * 1024;
+	static const size_t kMaxSignalingMessages = 1024;
 
 	void replay_alias_registration(const std::string& alias)
 	{
@@ -104,6 +106,7 @@ namespace {
 	}
 
 	void reconnect_signaling_timer(void* data);
+	void request_signaling_writable_timer(void* data);
 
 	void schedule_signaling_reconnect(const char* reason)
 	{
@@ -135,6 +138,48 @@ namespace {
 
 		humbleNetState.reconnectScheduled = false;
 		humblenet_signaling_connect();
+	}
+
+	bool queue_signaling_message(humblenet::P2PSignalConnection* conn, const uint8_t* buff, size_t length)
+	{
+		if (length > kMaxSignalingBytes || conn->queuedBytes > kMaxSignalingBytes - length ||
+			conn->sendQueue.size() >= kMaxSignalingMessages) {
+			return false;
+		}
+		conn->sendQueue.emplace_back(buff, buff + length);
+		conn->queuedBytes += length;
+		return true;
+	}
+
+	void schedule_signaling_writable(humblenet::P2PSignalConnection* conn)
+	{
+#ifndef EMSCRIPTEN
+		if (conn->writableWakePending) {
+			return;
+		}
+		conn->writableWakePending = true;
+		uintptr_t generation = static_cast<uintptr_t>(humbleNetState.reconnectGeneration);
+		humblenet_timer(request_signaling_writable_timer, 0, reinterpret_cast<void*>(generation));
+#else
+		internal_request_writable(conn->wsi);
+#endif
+	}
+
+	void request_signaling_writable_timer(void* data)
+	{
+		HUMBLENET_GUARD();
+
+		uintptr_t generation = reinterpret_cast<uintptr_t>(data);
+		if (!humbleNetState.p2pConn ||
+			generation != static_cast<uintptr_t>(humbleNetState.reconnectGeneration)) {
+			return;
+		}
+
+		humblenet::P2PSignalConnection* conn = humbleNetState.p2pConn.get();
+		conn->writableWakePending = false;
+		if (conn->wsi != NULL && !conn->sendQueue.empty()) {
+			internal_request_writable(conn->wsi);
+		}
 	}
 
 	void reset_signaling_connection()
@@ -215,13 +260,21 @@ namespace humblenet {
 			return false;
 		}
 
+#ifndef EMSCRIPTEN
+		if (!queue_signaling_message(conn, buff, length)) {
+			return false;
+		}
+		schedule_signaling_writable(conn);
+		return true;
+#else
 		{
 			HUMBLENET_UNGUARD();
 
 			int ret = internal_write_socket(conn->wsi, (const void*)buff, length );
 
-			return ret == length;
+			return ret == static_cast<int>(length);
 		}
+#endif
 	}
 
 	// called for incoming connections to indicate the connection process is completed.
@@ -343,10 +396,22 @@ namespace humblenet {
 
 		//        LOG("Data: %d -> %s\n", len, std::string((const char*)data,len).c_str());
 
-		conn->recvBuf.insert(conn->recvBuf.end()
-							 , reinterpret_cast<const char *>(data)
-							 , reinterpret_cast<const char *>(data) + len);
-		ha_bool retval = parseMessage(conn->recvBuf, p2pSignalProcess, NULL);
+		if (len < 0 || static_cast<size_t>(len) > kMaxSignalingBytes ||
+			conn->recvBuf.size() > kMaxSignalingBytes - static_cast<size_t>(len)) {
+			conn->recvBuf.clear();
+			reset_signaling_connection();
+			schedule_signaling_reconnect("message too large");
+			return -1;
+		}
+
+		const uint8_t* inBuf = reinterpret_cast<const uint8_t*>(data);
+		conn->recvBuf.insert(conn->recvBuf.end(), inBuf, inBuf + len);
+		if (!internal_websocket_message_complete(s)) {
+			return 0;
+		}
+		std::vector<uint8_t> message;
+		message.swap(conn->recvBuf);
+		ha_bool retval = parseMessage(message, p2pSignalProcess, NULL);
 		if (!retval) {
 			// error while parsing a message, close the connection
 			reset_signaling_connection();
@@ -375,13 +440,15 @@ namespace humblenet {
 			return -1;
 		}
 
-		if (conn->sendBuf.empty()) {
-			// no data in sendBuf
+		conn->writableWakePending = false;
+		if (conn->sendQueue.empty()) {
+			// no data in sendQueue
 			return 0;
 		}
 
-		int retval = internal_write_socket( conn->wsi, &conn->sendBuf[0], conn->sendBuf.size() );
-		if (retval < 0) {
+		std::vector<uint8_t>& message = conn->sendQueue.front();
+		int retval = internal_write_socket(conn->wsi, message.data(), static_cast<int>(message.size()));
+		if (retval != static_cast<int>(message.size())) {
 			// error while sending, close the connection
 			reset_signaling_connection();
 			schedule_signaling_reconnect("write failed");
@@ -389,7 +456,11 @@ namespace humblenet {
 		}
 
 		// successful write
-		conn->sendBuf.erase(conn->sendBuf.begin(), conn->sendBuf.begin() + retval);
+		conn->queuedBytes -= message.size();
+		conn->sendQueue.pop_front();
+		if (!conn->sendQueue.empty()) {
+			internal_request_writable(conn->wsi);
+		}
 
 		return 0;
 	}

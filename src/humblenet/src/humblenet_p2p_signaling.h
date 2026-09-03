@@ -3,18 +3,24 @@
 
 #include "humblepeer.h"
 #include "libsocket.h"
+#include <cstddef>
+#include <deque>
 #include <vector>
 
 namespace humblenet {
-    struct P2PSignalConnection {
-        internal_socket_t *wsi;
-        std::vector<uint8_t> recvBuf;
-        std::vector<char> sendBuf;
+	struct P2PSignalConnection {
+		internal_socket_t *wsi;
+		std::vector<uint8_t> recvBuf;
+		std::deque<std::vector<uint8_t>> sendQueue;
+		size_t queuedBytes;
+		bool writableWakePending;
 
-        P2PSignalConnection()
-        : wsi(NULL)
-        {
-        }
+		P2PSignalConnection()
+		: wsi(NULL)
+		, queuedBytes(0)
+		, writableWakePending(false)
+		{
+		}
 
         void disconnect() {
             if( wsi )

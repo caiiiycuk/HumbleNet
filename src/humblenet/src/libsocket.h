@@ -58,6 +58,9 @@ int internal_add_ice_candidate( internal_socket_t*, const char* candidate );
 void internal_set_data( internal_socket_t*, void* user_data);
 void internal_set_callbacks(internal_socket_t* socket, internal_callbacks_t* callbacks );
 int internal_write_socket( internal_socket_t*, const void* buf, int len );
+void internal_request_writable( internal_socket_t* );
+int internal_websocket_message_complete( internal_socket_t* );
+	void internal_abort_socket( internal_socket_t* );
 void internal_close_socket( internal_socket_t* );
     
 #ifdef __cplusplus

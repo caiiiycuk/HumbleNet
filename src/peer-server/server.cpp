@@ -10,11 +10,6 @@ namespace humblenet {
 	{
 	}
 
-	void Server::triggerWrite(struct lws *wsi)
-	{
-		lws_callback_on_writable(wsi);
-	}
-
 	void Server::closeConnection(P2PSignalConnection *conn)
 	{
 		if (conn == NULL || conn->wsi == NULL || conn->state == Closed || conn->state == Closing) {
@@ -22,7 +17,8 @@ namespace humblenet {
 		}
 
 		conn->state = Closing;
-		conn->sendBuf.clear();
+		conn->sendQueue.clear();
+		conn->queuedBytes = 0;
 		lws_close_reason(conn->wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0);
 		lws_callback_on_writable(conn->wsi);
 	}

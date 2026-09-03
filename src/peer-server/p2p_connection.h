@@ -4,6 +4,9 @@
 #include "humblepeer.h"
 #include "catalog.h"
 
+#include <cstddef>
+#include <deque>
+#include <vector>
 struct lws;
 
 namespace humblenet {
@@ -22,7 +25,8 @@ namespace humblenet {
 		Server* peerServer;
 
 		std::vector<uint8_t> recvBuf;
-		std::vector<char> sendBuf;
+		std::deque<std::vector<uint8_t>> sendQueue;
+		size_t queuedBytes;
 		struct lws *wsi;
 		PeerId peerId;
 		HumblePeerState state;
@@ -40,6 +44,7 @@ namespace humblenet {
 
 		P2PSignalConnection(Server* s)
 		: peerServer(s)
+		, queuedBytes(0)
 		, wsi(NULL)
 		, peerId (0)
 		, state(Opening)
@@ -53,7 +58,7 @@ namespace humblenet {
 
 		ha_bool processMsg(const HumblePeer::Message* msg);
 
-		void sendMessage(const uint8_t *buff, size_t length);
+		bool sendMessage(const uint8_t *buff, size_t length);
 	};
 
 }

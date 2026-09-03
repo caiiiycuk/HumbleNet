@@ -21,7 +21,6 @@ namespace humblenet {
 
 		Server();
 
-		void triggerWrite(struct lws* wsi);
 		void closeConnection(P2PSignalConnection *conn);
 	};
 

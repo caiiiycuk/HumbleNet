@@ -717,3 +717,20 @@ int internal_write_socket(internal_socket_t* socket, const void *buf, int bufsiz
 	// bad/disconnected socket
 	return -1;
 }
+
+void internal_request_writable(internal_socket_t* socket)
+{
+	if (socket != NULL && socket->wsi != NULL)
+		lws_callback_on_writable(socket->wsi);
+}
+
+int internal_websocket_message_complete(internal_socket_t* socket)
+{
+#ifndef EMSCRIPTEN
+	if (socket != NULL && socket->wsi != NULL) {
+		return lws_remaining_packet_payload(socket->wsi) == 0 &&
+			lws_is_final_fragment(socket->wsi);
+	}
+#endif
+	return 1;
+}
