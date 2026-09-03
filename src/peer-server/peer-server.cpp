@@ -10,7 +10,6 @@
 #include <iostream>
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
 
 #ifdef _WIN32
 #	define WIN32_LEAN_AND_MEAN
@@ -59,60 +58,94 @@ static std::unique_ptr<Server> peerServer;
 static bool lookup_peer(const std::string& hostname);
 
 struct LookupResponseState {
-	char body[16*1024];
+	unsigned char body[LWS_PRE + 16 * 1024];
+	size_t length;
+	int status;
 };
 
-static void append_json_escaped(std::string& dst, const std::string& src)
+static constexpr size_t kLookupBodyLimit = 16 * 1024;
+
+static bool append_lookup_bytes(LookupResponseState& response, const char* bytes, size_t length)
 {
-	for (char ch : src) {
-		switch (ch) {
-		case '"':
-			dst += "\\\"";
-			break;
-		case '\\':
-			dst += "\\\\";
-			break;
-		case '\b':
-			dst += "\\b";
-			break;
-		case '\f':
-			dst += "\\f";
-			break;
-		case '\n':
-			dst += "\\n";
-			break;
-		case '\r':
-			dst += "\\r";
-			break;
-		case '\t':
-			dst += "\\t";
-			break;
-		default:
-			dst += ch;
-			break;
-		}
+	if (response.length > kLookupBodyLimit || length > kLookupBodyLimit - response.length) {
+		return false;
 	}
+	memcpy(response.body + LWS_PRE + response.length, bytes, length);
+	response.length += length;
+	return true;
 }
 
-static std::string build_lookup_response(const std::string& hostname)
+static bool append_json_escaped(LookupResponseState& response, const std::string& src)
 {
-	if (hostname.empty()) {
-		std::string body = "{\"aliases\":[";
+	static const char hex[] = "0123456789abcdef";
+	for (char ch : src) {
+		const char* escaped = NULL;
+		switch (ch) {
+		case '"': escaped = "\\\""; break;
+		case '\\': escaped = "\\\\"; break;
+		case '\b': escaped = "\\b"; break;
+		case '\f': escaped = "\\f"; break;
+		case '\n': escaped = "\\n"; break;
+		case '\r': escaped = "\\r"; break;
+		case '\t': escaped = "\\t"; break;
+		default:
+			if (static_cast<unsigned char>(ch) < 0x20) {
+				char unicodeEscape[] = {
+					'\\', 'u', '0', '0',
+					hex[static_cast<unsigned char>(ch) >> 4],
+					hex[static_cast<unsigned char>(ch) & 0xf],
+				};
+				if (!append_lookup_bytes(response, unicodeEscape, sizeof(unicodeEscape))) {
+					return false;
+				}
+				continue;
+			}
+			if (!append_lookup_bytes(response, &ch, 1)) {
+				return false;
+			}
+			continue;
+		}
+		if (!append_lookup_bytes(response, escaped, strlen(escaped))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static void build_lookup_response(const std::string& hostname, LookupResponseState& response)
+{
+	response.length = 0;
+	response.status = HTTP_STATUS_OK;
+	bool complete = true;
+	if (!hostname.empty()) {
+		const char* body = lookup_peer(hostname) ? "{\"found\":true}" : "{\"found\":false}";
+		complete = append_lookup_bytes(response, body, strlen(body));
+	} else {
+		complete = append_lookup_bytes(response, "{\"aliases\":[", 12);
 		bool isFirst = true;
 		for (const auto& entry : peerServer->catalog->aliases) {
-			if (!isFirst) {
-				body += ",";
+			if (!isFirst && !append_lookup_bytes(response, ",", 1)) {
+				complete = false;
+				break;
 			}
-			body += "\"";
-			append_json_escaped(body, entry.first);
-			body += "\"";
+			if (!append_lookup_bytes(response, "\"", 1) ||
+				!append_json_escaped(response, entry.first) ||
+				!append_lookup_bytes(response, "\"", 1)) {
+				complete = false;
+				break;
+			}
 			isFirst = false;
 		}
-		body += "]}";
-		return body;
+		if (complete && !append_lookup_bytes(response, "]}", 2)) {
+			complete = false;
+		}
 	}
 
-	return lookup_peer(hostname) ? "{\"found\":true}" : "{\"found\":false}";
+	if (!complete) {
+		response.length = 0;
+		response.status = HTTP_STATUS_INTERNAL_SERVER_ERROR;
+		append_lookup_bytes(response, "{\"error\":\"lookup response too large\"}", 37);
+	}
 }
 
 
@@ -126,19 +159,7 @@ static bool lookup_peer_impl(const std::string& hostname) {
 }
 
 static bool lookup_peer(const std::string& hostname) {
-	auto found = lookup_peer_impl(hostname);
-	if (!found) {
-		std::string aliases = "";
-		for (auto &game : peerServer->catalog->aliases) {
-			aliases += game.first + ", ";
-		}
-	}
-
-	return found;
-}
-
-static const char* get_http_body(void *user) {
-	return reinterpret_cast<LookupResponseState*>(user)->body;
+	return lookup_peer_impl(hostname);
 }
 
 int callback_humblepeer(struct lws *wsi
@@ -158,14 +179,13 @@ int callback_humblepeer(struct lws *wsi
 				if (*hostname == '/') {
 					++hostname;
 				}
-				std::string responseBody = build_lookup_response(hostname);
-				snprintf(reinterpret_cast<LookupResponseState*>(user)->body,
-					sizeof(reinterpret_cast<LookupResponseState*>(user)->body), "%s", responseBody.c_str());
+				LookupResponseState *response = reinterpret_cast<LookupResponseState*>(user);
+				build_lookup_response(hostname, *response);
 				unsigned char buffer[8192];
 				memset(buffer, 0, sizeof(buffer));
 				unsigned char *p = buffer;
 				unsigned char *end = buffer + sizeof(buffer);
-				if (lws_add_http_header_status(wsi, HTTP_STATUS_OK, &p, end))
+				if (lws_add_http_header_status(wsi, response->status, &p, end))
 					return 1;
 				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CACHE_CONTROL, (unsigned char *)"no-cache", 8, &p, end))
 					return 1;
@@ -173,7 +193,7 @@ int callback_humblepeer(struct lws *wsi
 					return 1;
 				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_ACCESS_CONTROL_ALLOW_ORIGIN, (unsigned char *)"*", 1, &p, end))
 					return 1;
-				if (lws_add_http_header_content_length(wsi, strlen(get_http_body(user)), &p, end))
+				if (lws_add_http_header_content_length(wsi, response->length, &p, end))
 					return 1;
 				if (lws_finalize_write_http_header(wsi, buffer, &p, end))
 					return 1;
@@ -187,14 +207,8 @@ int callback_humblepeer(struct lws *wsi
 		break;
 	case LWS_CALLBACK_HTTP_WRITEABLE:
 		{
-			const char* body = NULL;
-			body = get_http_body(user);
-			size_t len = strlen(body);
-			unsigned char buffer[8192];
-			memset(buffer, 0, sizeof(buffer));
-			strncpy((char*)buffer, body, len);
-
-			if (lws_write(wsi, buffer, len, LWS_WRITE_HTTP_FINAL) != len) {
+			LookupResponseState *response = reinterpret_cast<LookupResponseState*>(user);
+			if (lws_write(wsi, response->body + LWS_PRE, response->length, LWS_WRITE_HTTP_FINAL) != static_cast<int>(response->length)) {
 				return 1;
 			}
 			if (lws_http_transaction_completed(wsi)) {
