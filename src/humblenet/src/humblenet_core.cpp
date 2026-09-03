@@ -803,9 +803,9 @@ ha_bool HUMBLENET_CALL humblenet_set_iceservers(const char* json) {
 }
 
 ha_bool internal_p2p_register_protocol() {
-	#if defined(EMSCRIPTEN)
+#if defined(EMSCRIPTEN)
 	apply_net_config_ice_servers_fallback();
-	#endif
+#endif
 	validate_ice_configuration(humbleNetState.configuredIceServers);
 
 	internal_callbacks_t callbacks;
@@ -822,23 +822,22 @@ ha_bool internal_p2p_register_protocol() {
 	callbacks.on_disconnect = on_disconnect;
 	callbacks.on_writable = on_writable;
 
-	humbleNetState.context = internal_init(  &callbacks );
-	if (humbleNetState.context == NULL) {
+	internal_context_t* context = internal_init(  &callbacks );
+	if (context == NULL) {
 		return false;
 	}
 
-	humblenet::register_protocol(humbleNetState.context);
+	if (!humblenet::register_protocol(context)) {
+		internal_deinit(context);
+		return false;
+	}
 
+	humbleNetState.context = context;
 	humbleNetState.webRTCSupported = internal_supports_webRTC( humbleNetState.context );
 	apply_configured_ice_servers_locked();
 
 	return true;
 }
-
-
-#ifndef EMSCRIPTEN
-extern "C" void poll_deinit();
-#endif
 
 void HUMBLENET_CALL humblenet_shutdown() {
 	{
@@ -853,10 +852,6 @@ void HUMBLENET_CALL humblenet_shutdown() {
 	}
 
 	humblenet_p2p_shutdown();
-
-#ifndef EMSCRIPTEN
-	poll_deinit();
-#endif
 
 }
 

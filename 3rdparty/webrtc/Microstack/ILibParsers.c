@@ -1704,11 +1704,13 @@ void ILibForceUnBlockChain(void* Chain)
 	//
 	// Writing data on the pipe will trigger the select on Posix
 	//
+	sem_wait(&ILibChainLock);
 	if (c->TerminateWritePipe != NULL)
 	{
 		fprintf(c->TerminateWritePipe," ");
 		fflush(c->TerminateWritePipe);
 	}
+	sem_post(&ILibChainLock);
 #endif
 }
 
@@ -2561,10 +2563,18 @@ ILibExportMethod void ILibStartChain(void *Chain)
 	//
 	// Free the pipe resources
 	//
-	fclose(((ILibBaseChain*)Chain)->TerminateReadPipe);
-	fclose(((ILibBaseChain*)Chain)->TerminateWritePipe);
+	sem_wait(&ILibChainLock);
+	if (((ILibBaseChain*)Chain)->TerminateReadPipe != NULL)
+	{
+		fclose(((ILibBaseChain*)Chain)->TerminateReadPipe);
+	}
+	if (((ILibBaseChain*)Chain)->TerminateWritePipe != NULL)
+	{
+		fclose(((ILibBaseChain*)Chain)->TerminateWritePipe);
+	}
 	((ILibBaseChain*)Chain)->TerminateReadPipe=0;
 	((ILibBaseChain*)Chain)->TerminateWritePipe=0;
+	sem_post(&ILibChainLock);
 #endif
 #if defined(WIN32)
 	if (((ILibBaseChain*)Chain)->TerminateSock != ~0)
@@ -5773,12 +5783,15 @@ void ILibLifeTime_Check(void *LifeTimeMonitorObject, fd_set *readset, fd_set *wr
 	//
 	// This will speed things up by skipping the timer check
 	//
+	ILibLinkedList_Lock(LifeTimeMonitor->ObjectList);
 	if(LifeTimeMonitor->NextTriggerTick !=0 && ((LifeTimeMonitor->NextTriggerTick > CurrentTick) && (LifeTimeMonitor->NextTriggerTick != -1) && (*blocktime > (int)(LifeTimeMonitor->NextTriggerTick - CurrentTick))))
 	{
 		*blocktime = (int)(LifeTimeMonitor->NextTriggerTick - CurrentTick);
+		ILibLinkedList_UnLock(LifeTimeMonitor->ObjectList);
 		return;
 	}
 	LifeTimeMonitor->NextTriggerTick = -1;
+	ILibLinkedList_UnLock(LifeTimeMonitor->ObjectList);
 
 	// This is an optimization. We are going to create the root of this linked list on the stack instead of the heap.
 	// This also fixes a crash with malloc returns NULL if this is created in the heap - No idea why this occurs.
@@ -5843,11 +5856,13 @@ void ILibLifeTime_Check(void *LifeTimeMonitorObject, fd_set *readset, fd_set *wr
 	}
 
 	// Compute how much time until next trigger
+	ILibLinkedList_Lock(LifeTimeMonitor->ObjectList);
 	if (LifeTimeMonitor->NextTriggerTick != -1 && *blocktime > (int)(LifeTimeMonitor->NextTriggerTick - CurrentTick))
 	{
 		int delta = (int)(LifeTimeMonitor->NextTriggerTick - CurrentTick);
 		if (delta > 1000) *blocktime = 1000; else *blocktime = delta;
 	}
+	ILibLinkedList_UnLock(LifeTimeMonitor->ObjectList);
 }
 
 /*! \fn ILibLifeTime_Remove(void *LifeTimeToken, void *data)
@@ -9002,5 +9017,3 @@ int ILibLinkedList_FileBacked_AddTail(ILibLinkedList_FileBacked_Root* root, char
 	fflush(source);
 	return(0);
 }
-
-

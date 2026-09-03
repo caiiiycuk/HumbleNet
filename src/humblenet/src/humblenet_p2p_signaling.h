@@ -23,7 +23,7 @@ namespace humblenet {
         }
     };
     
-    void register_protocol( internal_context_t* contet );
+	bool register_protocol( internal_context_t* context );
 }
 
 ha_bool humblenet_signaling_connect();

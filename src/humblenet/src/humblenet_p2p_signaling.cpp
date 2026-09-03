@@ -410,7 +410,7 @@ namespace humblenet {
 	}
 
 
-	void register_protocol(internal_context_t* context) {
+	bool register_protocol(internal_context_t* context) {
 		internal_callbacks_t callbacks;
 
 		memset(&callbacks, 0, sizeof(callbacks));
@@ -422,7 +422,10 @@ namespace humblenet {
 		callbacks.on_writable = on_writable;
 		callbacks.on_destroy = on_disconnect; // on connection failure to establish we only get a destroy, not a disconnect.
 
-		internal_register_protocol( humbleNetState.context, "humblepeer", &callbacks );
+		bool registered = internal_register_protocol(context, "humblepeer", &callbacks);
+		if (registered)
+			internal_publish_context(context);
+		return registered;
 	}
 }
 

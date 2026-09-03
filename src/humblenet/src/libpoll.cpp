@@ -2,8 +2,15 @@
 
 #include "libpoll.h"
 
+#include <algorithm>
+#include <atomic>
 #include <cassert>
+#include <chrono>
+#include <condition_variable>
 #include <errno.h>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 #ifndef WIN32
 #include <pthread.h>
@@ -570,8 +577,10 @@ void ILibDestroyChain(void *Chain) {
 	//
 	// Free the pipe resources
 	//
-	fclose(((ILibBaseChain*)Chain)->TerminateReadPipe);
-	fclose(((ILibBaseChain*)Chain)->TerminateWritePipe);
+	if (((ILibBaseChain*)Chain)->TerminateReadPipe != NULL)
+		fclose(((ILibBaseChain*)Chain)->TerminateReadPipe);
+	if (((ILibBaseChain*)Chain)->TerminateWritePipe != NULL)
+		fclose(((ILibBaseChain*)Chain)->TerminateWritePipe);
 	((ILibBaseChain*)Chain)->TerminateReadPipe=0;
 	((ILibBaseChain*)Chain)->TerminateWritePipe=0;
 #endif
@@ -595,32 +604,116 @@ void ILibDestroyChain(void *Chain) {
 }
 
 static ILibBaseChain* g_chain;
+static std::thread poll_thread;
+static std::atomic<bool> poll_stop_requested(false);
+static std::mutex poll_dispatch_mutex;
+static std::vector<std::pair<poll_timeout_t, void*>> poll_dispatch_queue;
+static std::mutex poll_thread_ready_mutex;
+static std::condition_variable poll_thread_ready_condition;
+static bool poll_thread_ready = false;
+
+static void poll_mark_thread_ready() {
+	std::lock_guard<std::mutex> lock(poll_thread_ready_mutex);
+	if (!poll_thread_ready) {
+		poll_thread_ready = true;
+		poll_thread_ready_condition.notify_all();
+	}
+}
+
+static void poll_run_dispatch_queue() {
+	std::vector<std::pair<poll_timeout_t, void*>> queue;
+	{
+		std::lock_guard<std::mutex> lock(poll_dispatch_mutex);
+		queue.swap(poll_dispatch_queue);
+	}
+	for (const auto &item : queue) {
+		if (item.first)
+			item.first(item.second);
+	}
+}
+
+static void poll_control_preselect(poll_module_t* module, fd_set*, fd_set*, fd_set*, int* blocktime) {
+	poll_mark_thread_ready();
+	poll_run_dispatch_queue();
+	*blocktime = std::min(*blocktime, 1000);
+	if (poll_stop_requested.load()) {
+		*blocktime = 0;
+		ILibStopChain(module->ParentChain);
+	}
+}
+
+static ILibBaseChain* poll_create_chain() {
+	ILibBaseChain* chain = static_cast<ILibBaseChain*>(ILibCreateChain());
+	poll_module_t* control = static_cast<poll_module_t*>(calloc(1, sizeof(poll_module_t)));
+	if (control == NULL)
+		ILIBCRITICALEXIT(254);
+	control->PreSelect = reinterpret_cast<poll_pre_select>(poll_control_preselect);
+	ILibAddToChain(chain, control);
+	return chain;
+}
 
 // thoughts...to allow deletion of stuffs...
 // allocate a private subchain and add it to the master chain, that way i can just destroy the subchain when a module is done...leaving the master chain intact,
 
-static void poll_async(void*) {
-	ILibStartChain(g_chain);
+static void poll_async(void* chain) {
+	ILibStartChain(chain);
+}
+
+static void poll_start_thread(ILibBaseChain* chain) {
+	poll_stop_requested.store(false);
+	{
+		std::lock_guard<std::mutex> lock(poll_thread_ready_mutex);
+		poll_thread_ready = false;
+	}
+	poll_thread = std::thread(poll_async, chain);
+	std::unique_lock<std::mutex> lock(poll_thread_ready_mutex);
+	poll_thread_ready_condition.wait_for(lock, std::chrono::seconds(2), [] { return poll_thread_ready; });
 }
 
 struct poll_context_t* poll_init() {
 	if( ! g_chain ) {
-		g_chain = (ILibBaseChain*)ILibCreateChain();
+		g_chain = poll_create_chain();
 		LOCK_INIT();
-#ifdef FULL_ASYNC
-		ILibSpawnNormalThread(&poll_async, NULL);
-#endif
 	}
 	return (poll_context_t*)g_chain;
+}
+
+struct poll_context_t* poll_init_with_module(poll_module_t* module) {
+	if (!g_chain) {
+		g_chain = poll_create_chain();
+		LOCK_INIT();
+		ILibAddToChain(g_chain, module);
+	} else {
+		poll_add_module(module);
+	}
+	return (poll_context_t*)g_chain;
+}
+
+void poll_start() {
+#ifdef FULL_ASYNC
+	if (g_chain != NULL && !poll_thread.joinable())
+		poll_start_thread(g_chain);
+#endif
 }
 
 void poll_deinit() {
 	if( g_chain ) {
 #ifdef FULL_ASYNC
-		ILibStopChain( g_chain );
+		poll_stop_requested.store(true);
+		if (poll_thread.joinable()) {
+			poll_interrupt();
+			poll_thread.join();
+		} else {
+			ILibDestroyChain( g_chain );
+		}
 #else
 		ILibDestroyChain( g_chain );
 #endif
+		{
+			std::lock_guard<std::mutex> lock(poll_dispatch_mutex);
+			poll_dispatch_queue.clear();
+		}
+		LOCK_DESTROY();
 		g_chain = NULL;
 	}
 }
@@ -646,8 +739,21 @@ void poll_unlock() {
 
 void poll_add_module( poll_module_t* module ) {
 	assert( g_chain != NULL );
-	
 	ILibChain_SafeAdd( g_chain, module );
+}
+
+void poll_dispatch( poll_timeout_t callback, void* user_data ) {
+	if (!callback)
+		return;
+#ifdef FULL_ASYNC
+	{
+		std::lock_guard<std::mutex> lock(poll_dispatch_mutex);
+		poll_dispatch_queue.push_back(std::make_pair(callback, user_data));
+	}
+	poll_interrupt();
+#else
+	callback(user_data);
+#endif
 }
 
 void ILibChain_Safe_Free(void *object)
@@ -671,6 +777,7 @@ void ILibChain_SafeDestroySink(void *object)
 	if( reinterpret_cast<poll_module_t*>( data->Object )->Destroy )
 		reinterpret_cast<poll_module_t*>( data->Object )->Destroy(data->Object);
 	
+	free(data->Object);
 	free(data);
 }
 
@@ -696,6 +803,17 @@ void poll_timeout(poll_timeout_t callback, int timeout_ms, void* user_data ) {
 }
 
 void poll_destroy_module( poll_module_t* module ) {
+	if (g_chain == NULL)
+		return;
+#ifdef FULL_ASYNC
+	if (!poll_thread.joinable()) {
+		ILibLinkedList_Remove_ByData(((ILibBaseChain*)g_chain)->Links, module);
+		if (module->Destroy)
+			module->Destroy(module);
+		free(module);
+		return;
+	}
+#endif
 	ILibChain_Safe_Destroy( g_chain, module );
 }
 

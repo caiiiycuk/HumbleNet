@@ -34,7 +34,6 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 		humblenet_set_error("Must specify server, game_token, and game_secret");
 		return 0;
 	}
-	initialized = true;
 	humbleNetState.signalingServerAddr = server;
 	humbleNetState.gameToken = game_token;
 	humbleNetState.gameSecret = game_secret;
@@ -56,8 +55,12 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 		humbleNetState.authToken = "";
 	}
 
-	internal_p2p_register_protocol();
+	if (!internal_p2p_register_protocol()) {
+		humblenet_set_error("Unable to initialize native networking context");
+		return 0;
+	}
 
+	initialized = true;
 	humblenet_signaling_connect();
 
 	return 1;
@@ -79,11 +82,6 @@ void humblenet_p2p_shutdown() {
 	humbleNetState.reconnectScheduled = false;
 	++humbleNetState.reconnectGeneration;
 
-	// drop the server
-	if( humbleNetState.p2pConn ) {
-		humbleNetState.p2pConn->disconnect();
-		humbleNetState.p2pConn.reset();
-	}
 	humbleNetState.myPeerId = 0;
 	humbleNetState.reconnectPeerId = 0;
 	humbleNetState.reconnectToken.clear();
@@ -93,6 +91,7 @@ void humblenet_p2p_shutdown() {
 	humbleNetState.pendingAliasUnregisterAll = false;
 	internal_deinit(humbleNetState.context);
 	humbleNetState.context = NULL;
+	humbleNetState.p2pConn.reset();
 }
 
 /*

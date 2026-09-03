@@ -25,18 +25,24 @@ struct poll_module_t {
     poll_pre_select PreSelect;
     poll_post_select PostSelect;
     poll_pre_destroy Destroy;
+    void* ParentChain;
+    void* ExtraMemoryPtr;
 };
 
 typedef void (*poll_timeout_t)(void* data );
 
 // Initialize the polling system
 struct poll_context_t* poll_init();
+struct poll_context_t* poll_init_with_module(poll_module_t* module);
+
+// Start the async polling thread after startup modules are added.
+void poll_start();
 
 // shutdown the polling system (will shutdown all bound modules as well)
 void poll_deinit();
     
 // return the poll context
-//struct poll_context_t* poll_chain();
+void* poll_chain();
 
 // lock the polling system
 void poll_lock();
@@ -49,6 +55,9 @@ void poll_wait( int timeout_ms );
 
 // Add a module the polling system
 void poll_add_module( poll_module_t* module );
+
+// run callback on the polling thread as soon as possible
+void poll_dispatch( poll_timeout_t callback, void* user_data );
 
 // destroy a module (and remove from polling system)
 void poll_destroy_module( poll_module_t* module );

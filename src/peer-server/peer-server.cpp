@@ -55,8 +55,6 @@ namespace humblenet {
 
 static std::unique_ptr<Server> peerServer;
 
-static bool lookup_peer(const std::string& hostname);
-
 struct LookupResponseState {
 	unsigned char body[LWS_PRE + 16 * 1024];
 	size_t length;
@@ -118,7 +116,10 @@ static void build_lookup_response(const std::string& hostname, LookupResponseSta
 	response.status = HTTP_STATUS_OK;
 	bool complete = true;
 	if (!hostname.empty()) {
-		const char* body = lookup_peer(hostname) ? "{\"found\":true}" : "{\"found\":false}";
+		auto& aliases = peerServer->catalog->aliases;
+		const char* body = aliases.find(hostname) != aliases.end()
+			? "{\"found\":true}"
+			: "{\"found\":false}";
 		complete = append_lookup_bytes(response, body, strlen(body));
 	} else {
 		complete = append_lookup_bytes(response, "{\"aliases\":[", 12);
@@ -153,15 +154,6 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 	return reinterpret_cast<P2PSignalConnection *>(user_data)->processMsg(msg);
 }
 
-static bool lookup_peer_impl(const std::string& hostname) {
-	auto& aliases = peerServer->catalog->aliases;
-	return aliases.find(hostname) != aliases.end();
-}
-
-static bool lookup_peer(const std::string& hostname) {
-	return lookup_peer_impl(hostname);
-}
-
 int callback_humblepeer(struct lws *wsi
 				  , enum lws_callback_reasons reason
 				  , void *user, void *in, size_t len) {
@@ -189,7 +181,8 @@ int callback_humblepeer(struct lws *wsi
 					return 1;
 				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CACHE_CONTROL, (unsigned char *)"no-cache", 8, &p, end))
 					return 1;
-				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CONTENT_TYPE, (unsigned char *)"application/json", 16, &p, end))
+				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CONTENT_TYPE,
+						(unsigned char *)"application/json", 16, &p, end))
 					return 1;
 				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_ACCESS_CONTROL_ALLOW_ORIGIN, (unsigned char *)"*", 1, &p, end))
 					return 1;
@@ -208,7 +201,8 @@ int callback_humblepeer(struct lws *wsi
 	case LWS_CALLBACK_HTTP_WRITEABLE:
 		{
 			LookupResponseState *response = reinterpret_cast<LookupResponseState*>(user);
-			if (lws_write(wsi, response->body + LWS_PRE, response->length, LWS_WRITE_HTTP_FINAL) != static_cast<int>(response->length)) {
+			int written = lws_write(wsi, response->body + LWS_PRE, response->length, LWS_WRITE_HTTP_FINAL);
+			if (written != static_cast<int>(response->length)) {
 				return 1;
 			}
 			if (lws_http_transaction_completed(wsi)) {
