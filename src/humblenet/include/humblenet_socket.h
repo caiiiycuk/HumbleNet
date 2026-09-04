@@ -103,6 +103,25 @@ int hs_select( int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
 	}
 	return 0;
 #else
+	if( timeout && readfds && g_humblenet_socket != INVALID_SOCKET && FD_ISSET( g_humblenet_socket, readfds ) && !writefds && !exceptfds ) {
+		int only_humblenet = 1;
+		for( int fd = 0; fd < nfds; ++fd ) {
+			if( fd != g_humblenet_socket && FD_ISSET( fd, readfds ) ) {
+				only_humblenet = 0;
+				break;
+			}
+		}
+		if( only_humblenet ) {
+			int timeout_ms = (int)(timeout->tv_sec * 1000 + (timeout->tv_usec + 999) / 1000);
+			FD_ZERO( readfds );
+			if( humblenet_p2p_wait(timeout_ms) ) {
+				FD_SET( g_humblenet_socket, readfds );
+				return 1;
+			}
+			return 0;
+		}
+	}
+
 	int ret = humblenet_p2p_select( nfds, readfds, writefds, exceptfds, timeout );
 	if( ret > 0 ) {
 		return ret;

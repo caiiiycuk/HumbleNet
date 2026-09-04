@@ -611,6 +611,9 @@ static std::vector<std::pair<poll_timeout_t, void*>> poll_dispatch_queue;
 static std::mutex poll_thread_ready_mutex;
 static std::condition_variable poll_thread_ready_condition;
 static bool poll_thread_ready = false;
+static std::mutex poll_wait_mutex;
+static std::condition_variable poll_wait_condition;
+static bool poll_wait_interrupted = false;
 
 static void poll_mark_thread_ready() {
 	std::lock_guard<std::mutex> lock(poll_thread_ready_mutex);
@@ -737,6 +740,17 @@ void poll_unlock() {
 	LOCK_RELEASE();
 }
 
+void poll_wait(int timeout_ms) {
+	if (timeout_ms <= 0)
+		return;
+
+	std::unique_lock<std::mutex> lock(poll_wait_mutex);
+	poll_wait_condition.wait_for(lock, std::chrono::milliseconds(timeout_ms), [] {
+		return poll_wait_interrupted;
+	});
+	poll_wait_interrupted = false;
+}
+
 void poll_add_module( poll_module_t* module ) {
 	assert( g_chain != NULL );
 	ILibChain_SafeAdd( g_chain, module );
@@ -857,6 +871,11 @@ int poll_select( int nfds, fd_set *readfds, fd_set *writefds,
 }
 
 void poll_interrupt() {
+	{
+		std::lock_guard<std::mutex> lock(poll_wait_mutex);
+		poll_wait_interrupted = true;
+	}
+	poll_wait_condition.notify_all();
 	if( g_chain != NULL ) {
 		ILibForceUnBlockChain(g_chain);
 	}

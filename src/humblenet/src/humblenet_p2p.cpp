@@ -332,30 +332,17 @@ int HUMBLENET_CALL humblenet_p2p_select(int nfds, fd_set *readfds, fd_set *write
 ha_bool HUMBLENET_CALL humblenet_p2p_wait(int ms) {
 	P2P_INIT_GUARD( false );
 
-	struct timeval tv;
-
-	// This is not really needed in a threaded environment,
-	// e.g. if this is being used as a sleep till something is ready,
-	// we need this. If its being used as a "let IO run" (e.g. threaded IO) then we dont.
 	if( ms > 0 ) {
 		HUMBLENET_GUARD();
 
-		if( ! humbleNetState.pendingDataConnections.empty() ) {
-			ms = 0;
-		}
+		if( ! humbleNetState.pendingDataConnections.empty() || ! humbleNetState.pendingNewConnections.empty() || ! humbleNetState.remoteClosedConnections.empty() )
+			return true;
 	}
 
-	tv.tv_sec = ms / 1000;
-	tv.tv_usec = 1000 * (ms % 1000);
+	poll_wait(ms);
+	HUMBLENET_GUARD();
 
-	if( poll_select( 0, NULL, NULL, NULL, &tv ) > 0 )
-		return true;
-	else
-	{
-		HUMBLENET_GUARD();
-
-		return ! humbleNetState.pendingDataConnections.empty() || ! humbleNetState.pendingNewConnections.empty() || ! humbleNetState.remoteClosedConnections.empty();
-	}
+	return ! humbleNetState.pendingDataConnections.empty() || ! humbleNetState.pendingNewConnections.empty() || ! humbleNetState.remoteClosedConnections.empty();
 }
 
 #else
