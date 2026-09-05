@@ -595,12 +595,13 @@ internal_socket_t* internal_connect_websocket( const char *server_addr, const ch
 	if (it == g_context->protocols.end())
 		return NULL;
 
-	internal_socket_t* socket = new internal_socket_t(true);
+	internal_socket_t* socket = new internal_socket_t(false);
 	socket->context = g_context;
 	socket->callbacks = it->second;
 	socket->url = server_addr;
 
 	struct lws* wsi = lws_client_connect_extended(g_context->websocket, server_addr, protocol, socket );
+	socket->owner = true;
 	if (wsi == NULL) {
 		delete socket;
 		return NULL;

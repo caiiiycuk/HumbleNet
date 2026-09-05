@@ -176,6 +176,8 @@ namespace {
 }
 
 ha_bool humblenet_signaling_connect() {
+	HUMBLENET_GUARD();
+
 	using namespace humblenet;
 
 	if (humbleNetState.p2pConn) {
