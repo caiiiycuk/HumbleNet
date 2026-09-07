@@ -42,9 +42,10 @@ struct internal_callbacks_t {
 
 internal_context_t* internal_init(internal_callbacks_t*);
 void internal_deinit(internal_context_t*);
+void internal_publish_context(internal_context_t*);
     
 bool internal_supports_webRTC( internal_context_t *);
-void internal_register_protocol( internal_context_t*, const char* protocol, internal_callbacks_t* callbacks );
+bool internal_register_protocol( internal_context_t*, const char* protocol, internal_callbacks_t* callbacks );
     
 internal_socket_t* internal_connect_websocket( const char* addr, const char* protocol );
 internal_socket_t* internal_create_webrtc(internal_context_t *);
@@ -57,6 +58,9 @@ int internal_add_ice_candidate( internal_socket_t*, const char* candidate );
 void internal_set_data( internal_socket_t*, void* user_data);
 void internal_set_callbacks(internal_socket_t* socket, internal_callbacks_t* callbacks );
 int internal_write_socket( internal_socket_t*, const void* buf, int len );
+void internal_request_writable( internal_socket_t* );
+int internal_websocket_message_complete( internal_socket_t* );
+	void internal_abort_socket( internal_socket_t* );
 void internal_close_socket( internal_socket_t* );
     
 #ifdef __cplusplus

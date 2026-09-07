@@ -34,7 +34,6 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 		humblenet_set_error("Must specify server, game_token, and game_secret");
 		return 0;
 	}
-	initialized = true;
 	humbleNetState.signalingServerAddr = server;
 	humbleNetState.gameToken = game_token;
 	humbleNetState.gameSecret = game_secret;
@@ -45,10 +44,23 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 	humbleNetState.reconnectScheduled = false;
 	++humbleNetState.reconnectGeneration;
 	humbleNetState.signalingReconnectEnabled = true;
-	humbleNetState.registeredAliases.clear();
 	humbleNetState.pendingAliasRegistrations.clear();
 	humbleNetState.pendingAliasUnregistrations.clear();
-	humbleNetState.pendingAliasUnregisterAll = false;
+	humbleNetState.oldSessionAliasOwners.clear();
+	humbleNetState.blockedAliasAcquisitions.clear();
+	humbleNetState.aliasWorkDeferred = false;
+	humbleNetState.desiredAliases.clear();
+	humbleNetState.sessionAliases.clear();
+	humbleNetState.confirmedAliases.clear();
+	humbleNetState.aliasIntentRevision.clear();
+	humbleNetState.aliasLookups.clear();
+	humbleNetState.aliasLookupTimeoutScheduled = false;
+	humbleNetState.aliasLookupTimerDeadlineMs = 0;
+	++humbleNetState.aliasLookupTimerGeneration;
+	humbleNetState.aliasHealthCheckScheduled = false;
+	++humbleNetState.aliasHealthCheckGeneration;
+	humbleNetState.pendingAliasHealthChecks.clear();
+	humbleNetState.pendingAliasQueryOut.clear();
 
 	if( auth_token ) {
 		humbleNetState.authToken = auth_token;
@@ -56,8 +68,12 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
 		humbleNetState.authToken = "";
 	}
 
-	internal_p2p_register_protocol();
+	if (!internal_p2p_register_protocol()) {
+		humblenet_set_error("Unable to initialize native networking context");
+		return 0;
+	}
 
+	initialized = true;
 	humblenet_signaling_connect();
 
 	return 1;
@@ -67,32 +83,53 @@ ha_bool HUMBLENET_CALL humblenet_p2p_init(const char* server, const char* game_t
  * Shut down the networking library
  */
 void humblenet_p2p_shutdown() {
-	if (!initialized) {
-		return;
+	internal_context_t* context = NULL;
+	std::vector<std::function<void(std::vector<std::pair<std::string,PeerId>>)>> aliasQueryCallbacks;
+
+	{
+		HUMBLENET_GUARD();
+
+		if (!initialized) {
+			return;
+		}
+
+		LOG("humblenet_p2p_shutdown\n");
+
+		initialized = false;
+		humbleNetState.signalingReconnectEnabled = false;
+		humbleNetState.reconnectScheduled = false;
+		++humbleNetState.reconnectGeneration;
+		humbleNetState.aliasHealthCheckScheduled = false;
+		++humbleNetState.aliasHealthCheckGeneration;
+		humbleNetState.pendingAliasHealthChecks.clear();
+		context = humbleNetState.context;
+		humbleNetState.context = NULL;
 	}
 
-	LOG("humblenet_p2p_shutdown\n");
+	internal_deinit(context);
 
-	// disconnect from signaling server, shutdown all p2p connections, etc.
-	initialized = false;
-	humbleNetState.signalingReconnectEnabled = false;
-	humbleNetState.reconnectScheduled = false;
-	++humbleNetState.reconnectGeneration;
-
-	// drop the server
-	if( humbleNetState.p2pConn ) {
-		humbleNetState.p2pConn->disconnect();
-		humbleNetState.p2pConn.reset();
-	}
 	humbleNetState.myPeerId = 0;
 	humbleNetState.reconnectPeerId = 0;
 	humbleNetState.reconnectToken.clear();
-	humbleNetState.registeredAliases.clear();
 	humbleNetState.pendingAliasRegistrations.clear();
 	humbleNetState.pendingAliasUnregistrations.clear();
-	humbleNetState.pendingAliasUnregisterAll = false;
-	internal_deinit(humbleNetState.context);
-	humbleNetState.context = NULL;
+	humbleNetState.oldSessionAliasOwners.clear();
+	humbleNetState.blockedAliasAcquisitions.clear();
+	humbleNetState.aliasWorkDeferred = false;
+	humbleNetState.desiredAliases.clear();
+	humbleNetState.sessionAliases.clear();
+	humbleNetState.confirmedAliases.clear();
+	humbleNetState.aliasIntentRevision.clear();
+	humbleNetState.aliasLookups.clear();
+	humbleNetState.aliasLookupTimeoutScheduled = false;
+	humbleNetState.aliasLookupTimerDeadlineMs = 0;
+	++humbleNetState.aliasLookupTimerGeneration;
+	humbleNetState.p2pConn.reset();
+	aliasQueryCallbacks = internal_alias_cancel_queries();
+
+	for (const auto& callback : aliasQueryCallbacks) {
+		callback({});
+	}
 }
 
 /*
@@ -295,30 +332,17 @@ int HUMBLENET_CALL humblenet_p2p_select(int nfds, fd_set *readfds, fd_set *write
 ha_bool HUMBLENET_CALL humblenet_p2p_wait(int ms) {
 	P2P_INIT_GUARD( false );
 
-	struct timeval tv;
-
-	// This is not really needed in a threaded environment,
-	// e.g. if this is being used as a sleep till something is ready,
-	// we need this. If its being used as a "let IO run" (e.g. threaded IO) then we dont.
 	if( ms > 0 ) {
 		HUMBLENET_GUARD();
 
-		if( ! humbleNetState.pendingDataConnections.empty() ) {
-			ms = 0;
-		}
+		if( ! humbleNetState.pendingDataConnections.empty() || ! humbleNetState.pendingNewConnections.empty() || ! humbleNetState.remoteClosedConnections.empty() )
+			return true;
 	}
 
-	tv.tv_sec = ms / 1000;
-	tv.tv_usec = 1000 * (ms % 1000);
+	poll_wait(ms);
+	HUMBLENET_GUARD();
 
-	if( poll_select( 0, NULL, NULL, NULL, &tv ) > 0 )
-		return true;
-	else
-	{
-		HUMBLENET_GUARD();
-
-		return ! humbleNetState.pendingDataConnections.empty() || ! humbleNetState.pendingNewConnections.empty() || ! humbleNetState.remoteClosedConnections.empty();
-	}
+	return ! humbleNetState.pendingDataConnections.empty() || ! humbleNetState.pendingNewConnections.empty() || ! humbleNetState.remoteClosedConnections.empty();
 }
 
 #else

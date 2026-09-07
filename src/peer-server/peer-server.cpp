@@ -10,7 +10,6 @@
 #include <iostream>
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
 
 #ifdef _WIN32
 #	define WIN32_LEAN_AND_MEAN
@@ -48,7 +47,13 @@ namespace humblenet {
 	}
 
 	ha_bool sendP2PMessage(P2PSignalConnection *conn, const uint8_t *buff, size_t length) {
-		conn->sendMessage(buff, length);
+		if (conn == NULL) {
+			return false;
+		}
+		if (!conn->sendMessage(buff, length)) {
+			conn->peerServer->closeConnection(conn);
+			return false;
+		}
 		return true;
 	}
 
@@ -56,89 +61,105 @@ namespace humblenet {
 
 static std::unique_ptr<Server> peerServer;
 
-static bool lookup_peer(const std::string& hostname);
+static const size_t kMaxSignalingBytes = 1024 * 1024;
 
 struct LookupResponseState {
-	char body[16*1024];
+	unsigned char body[LWS_PRE + 16 * 1024];
+	size_t length;
+	int status;
 };
 
-static void append_json_escaped(std::string& dst, const std::string& src)
+static constexpr size_t kLookupBodyLimit = 16 * 1024;
+
+static bool append_lookup_bytes(LookupResponseState& response, const char* bytes, size_t length)
 {
-	for (char ch : src) {
-		switch (ch) {
-		case '"':
-			dst += "\\\"";
-			break;
-		case '\\':
-			dst += "\\\\";
-			break;
-		case '\b':
-			dst += "\\b";
-			break;
-		case '\f':
-			dst += "\\f";
-			break;
-		case '\n':
-			dst += "\\n";
-			break;
-		case '\r':
-			dst += "\\r";
-			break;
-		case '\t':
-			dst += "\\t";
-			break;
-		default:
-			dst += ch;
-			break;
-		}
+	if (response.length > kLookupBodyLimit || length > kLookupBodyLimit - response.length) {
+		return false;
 	}
+	memcpy(response.body + LWS_PRE + response.length, bytes, length);
+	response.length += length;
+	return true;
 }
 
-static std::string build_lookup_response(const std::string& hostname)
+static bool append_json_escaped(LookupResponseState& response, const std::string& src)
 {
-	if (hostname.empty()) {
-		std::string body = "{\"aliases\":[";
+	static const char hex[] = "0123456789abcdef";
+	for (char ch : src) {
+		const char* escaped = NULL;
+		switch (ch) {
+		case '"': escaped = "\\\""; break;
+		case '\\': escaped = "\\\\"; break;
+		case '\b': escaped = "\\b"; break;
+		case '\f': escaped = "\\f"; break;
+		case '\n': escaped = "\\n"; break;
+		case '\r': escaped = "\\r"; break;
+		case '\t': escaped = "\\t"; break;
+		default:
+			if (static_cast<unsigned char>(ch) < 0x20) {
+				char unicodeEscape[] = {
+					'\\', 'u', '0', '0',
+					hex[static_cast<unsigned char>(ch) >> 4],
+					hex[static_cast<unsigned char>(ch) & 0xf],
+				};
+				if (!append_lookup_bytes(response, unicodeEscape, sizeof(unicodeEscape))) {
+					return false;
+				}
+				continue;
+			}
+			if (!append_lookup_bytes(response, &ch, 1)) {
+				return false;
+			}
+			continue;
+		}
+		if (!append_lookup_bytes(response, escaped, strlen(escaped))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static void build_lookup_response(const std::string& hostname, LookupResponseState& response)
+{
+	response.length = 0;
+	response.status = HTTP_STATUS_OK;
+	bool complete = true;
+	if (!hostname.empty()) {
+		auto& aliases = peerServer->catalog->aliases;
+		const char* body = aliases.find(hostname) != aliases.end()
+			? "{\"found\":true}"
+			: "{\"found\":false}";
+		complete = append_lookup_bytes(response, body, strlen(body));
+	} else {
+		complete = append_lookup_bytes(response, "{\"aliases\":[", 12);
 		bool isFirst = true;
 		for (const auto& entry : peerServer->catalog->aliases) {
-			if (!isFirst) {
-				body += ",";
+			if (!isFirst && !append_lookup_bytes(response, ",", 1)) {
+				complete = false;
+				break;
 			}
-			body += "\"";
-			append_json_escaped(body, entry.first);
-			body += "\"";
+			if (!append_lookup_bytes(response, "\"", 1) ||
+				!append_json_escaped(response, entry.first) ||
+				!append_lookup_bytes(response, "\"", 1)) {
+				complete = false;
+				break;
+			}
 			isFirst = false;
 		}
-		body += "]}";
-		return body;
+		if (complete && !append_lookup_bytes(response, "]}", 2)) {
+			complete = false;
+		}
 	}
 
-	return lookup_peer(hostname) ? "{\"found\":true}" : "{\"found\":false}";
+	if (!complete) {
+		response.length = 0;
+		response.status = HTTP_STATUS_INTERNAL_SERVER_ERROR;
+		append_lookup_bytes(response, "{\"error\":\"lookup response too large\"}", 37);
+	}
 }
 
 
 static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void *user_data) {
 	return reinterpret_cast<P2PSignalConnection *>(user_data)->processMsg(msg);
-}
-
-static bool lookup_peer_impl(const std::string& hostname) {
-	auto& aliases = peerServer->catalog->aliases;
-	return aliases.find(hostname) != aliases.end();
-}
-
-static bool lookup_peer(const std::string& hostname) {
-	auto found = lookup_peer_impl(hostname);
-	if (!found) {
-		std::string aliases = "";
-		for (auto &game : peerServer->catalog->aliases) {
-			aliases += game.first + ", ";
-		}
-	}
-
-	return found;
-}
-
-static const char* get_http_body(void *user) {
-	return reinterpret_cast<LookupResponseState*>(user)->body;
 }
 
 int callback_humblepeer(struct lws *wsi
@@ -158,22 +179,22 @@ int callback_humblepeer(struct lws *wsi
 				if (*hostname == '/') {
 					++hostname;
 				}
-				std::string responseBody = build_lookup_response(hostname);
-				snprintf(reinterpret_cast<LookupResponseState*>(user)->body,
-					sizeof(reinterpret_cast<LookupResponseState*>(user)->body), "%s", responseBody.c_str());
+				LookupResponseState *response = reinterpret_cast<LookupResponseState*>(user);
+				build_lookup_response(hostname, *response);
 				unsigned char buffer[8192];
 				memset(buffer, 0, sizeof(buffer));
 				unsigned char *p = buffer;
 				unsigned char *end = buffer + sizeof(buffer);
-				if (lws_add_http_header_status(wsi, HTTP_STATUS_OK, &p, end))
+				if (lws_add_http_header_status(wsi, response->status, &p, end))
 					return 1;
 				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CACHE_CONTROL, (unsigned char *)"no-cache", 8, &p, end))
 					return 1;
-				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CONTENT_TYPE, (unsigned char *)"application/json", 16, &p, end))
+				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_CONTENT_TYPE,
+						(unsigned char *)"application/json", 16, &p, end))
 					return 1;
 				if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_ACCESS_CONTROL_ALLOW_ORIGIN, (unsigned char *)"*", 1, &p, end))
 					return 1;
-				if (lws_add_http_header_content_length(wsi, strlen(get_http_body(user)), &p, end))
+				if (lws_add_http_header_content_length(wsi, response->length, &p, end))
 					return 1;
 				if (lws_finalize_write_http_header(wsi, buffer, &p, end))
 					return 1;
@@ -187,14 +208,9 @@ int callback_humblepeer(struct lws *wsi
 		break;
 	case LWS_CALLBACK_HTTP_WRITEABLE:
 		{
-			const char* body = NULL;
-			body = get_http_body(user);
-			size_t len = strlen(body);
-			unsigned char buffer[8192];
-			memset(buffer, 0, sizeof(buffer));
-			strncpy((char*)buffer, body, len);
-
-			if (lws_write(wsi, buffer, len, LWS_WRITE_HTTP_FINAL) != len) {
+			LookupResponseState *response = reinterpret_cast<LookupResponseState*>(user);
+			int written = lws_write(wsi, response->body + LWS_PRE, response->length, LWS_WRITE_HTTP_FINAL);
+			if (written != static_cast<int>(response->length)) {
 				return 1;
 			}
 			if (lws_http_transaction_completed(wsi)) {
@@ -293,16 +309,24 @@ int callback_humblepeer(struct lws *wsi
 				return 0;
 			}
 
-			char *inBuf = reinterpret_cast<char *>(in);
-			it->second->recvBuf.insert(it->second->recvBuf.end(), inBuf, inBuf + len);
+			P2PSignalConnection *conn = it->second.get();
+			if (len > kMaxSignalingBytes ||
+				conn->recvBuf.size() > kMaxSignalingBytes - len) {
+				LOG_ERROR("Signaling message from \"%s\" is too large\n", conn->url.c_str());
+				conn->recvBuf.clear();
+				return -1;
+			}
+
+			uint8_t *inBuf = reinterpret_cast<uint8_t *>(in);
+			conn->recvBuf.insert(conn->recvBuf.end(), inBuf, inBuf + len);
 
 			// If we finished receiving a whole message
 			if (!lws_remaining_packet_payload(wsi) && lws_is_final_fragment(wsi)) {
 				// function which will parse recvBuf
-				ha_bool retval = parseMessage(it->second->recvBuf, p2pSignalProcess, it->second.get());
+				ha_bool retval = parseMessage(conn->recvBuf, p2pSignalProcess, conn);
 				if (!retval) {
 					// error in parsing, close connection
-					LOG_ERROR("Error in parsing message from \"%s\"\n", it->second->url.c_str());
+					LOG_ERROR("Error in parsing message from \"%s\"\n", conn->url.c_str());
 					return -1;
 				}
 			}
@@ -329,20 +353,17 @@ int callback_humblepeer(struct lws *wsi
 				return -1;
 			}
 
-			if (conn->sendBuf.empty()) {
-				// no data in sendBuf
+			if (conn->sendQueue.empty()) {
+				// no data in sendQueue
 				return 0;
 			}
 
-			size_t bufsize = conn->sendBuf.size();
+			std::vector<uint8_t>& message = conn->sendQueue.front();
+			size_t bufsize = message.size();
 			std::vector<unsigned char> sendbuf(LWS_SEND_BUFFER_PRE_PADDING + bufsize + LWS_SEND_BUFFER_POST_PADDING, 0);
-			memcpy(&sendbuf[LWS_SEND_BUFFER_PRE_PADDING], &conn->sendBuf[0], bufsize);
+			memcpy(&sendbuf[LWS_SEND_BUFFER_PRE_PADDING], message.data(), bufsize);
 			int retval = lws_write(conn->wsi, &sendbuf[LWS_SEND_BUFFER_PRE_PADDING], bufsize, LWS_WRITE_BINARY);
-			if (retval < 0) {
-				// error while sending, close the connection
-				return -1;
-			}
-			if (retval < bufsize) {
+			if (retval != static_cast<int>(bufsize)) {
 				// This should not happen. lws_write returns the number of bytes written but it includes the headers it adds to pre padding which we don't know about.
 				// So if it actually does a partial write there is no way for us to know how much of our data was sent and how much was headers, the API would be broken.
 				// The docs say it buffers data internally and sends it all, so this shouldn't happen.
@@ -351,7 +372,11 @@ int callback_humblepeer(struct lws *wsi
 			}
 
 			// successful write
-			conn->sendBuf.clear();
+			conn->queuedBytes -= message.size();
+			conn->sendQueue.pop_front();
+			if (!conn->sendQueue.empty()) {
+				lws_callback_on_writable(conn->wsi);
+			}
 		}
 		break;
 

@@ -24,18 +24,8 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 namespace {
 	static const uint32_t kReconnectBaseDelayMs = 500;
 	static const uint32_t kReconnectMaxDelayMs = 30000;
-
-	void replay_alias_registration(const std::string& alias)
-	{
-		if (!humbleNetState.p2pConn) {
-			return;
-		}
-
-		if (humblenet::sendAliasRegister(humbleNetState.p2pConn.get(), alias)) {
-			humbleNetState.pendingAliasRegistrations.insert(alias);
-			humblenet::sendAliasLookup(humbleNetState.p2pConn.get(), alias);
-		}
-	}
+	static const size_t kMaxSignalingBytes = 1024 * 1024;
+	static const size_t kMaxSignalingMessages = 1024;
 
 	uint32_t computeReconnectDelayMs(uint32_t attempt)
 	{
@@ -47,41 +37,6 @@ namespace {
 		uint32_t jitterRange = std::max<uint32_t>(1, cappedDelay / 4);
 		uint32_t jitter = static_cast<uint32_t>(seed % (jitterRange + 1));
 		return std::min(kReconnectMaxDelayMs, cappedDelay + jitter);
-	}
-
-	void replay_registered_aliases()
-	{
-		for (const auto& alias : humbleNetState.registeredAliases) {
-			replay_alias_registration(alias);
-		}
-	}
-
-	void replay_pending_alias_registrations()
-	{
-		std::vector<std::string> aliases(
-			humbleNetState.pendingAliasRegistrations.begin(),
-			humbleNetState.pendingAliasRegistrations.end()
-		);
-
-		for (const auto& alias : aliases) {
-			replay_alias_registration(alias);
-		}
-	}
-
-	void replay_pending_alias_unregistrations()
-	{
-		if (!humbleNetState.p2pConn) {
-			return;
-		}
-
-		if (humbleNetState.pendingAliasUnregisterAll) {
-			humblenet::sendAliasUnregister(humbleNetState.p2pConn.get(), "");
-			return;
-		}
-
-		for (const auto& alias : humbleNetState.pendingAliasUnregistrations) {
-			humblenet::sendAliasUnregister(humbleNetState.p2pConn.get(), alias);
-		}
 	}
 
 	void replay_pending_alias_queries()
@@ -97,13 +52,24 @@ namespace {
 		}
 
 		for (const auto& query : queries) {
+			if (!humbleNetState.p2pConn) {
+				return;
+			}
 			if (!humblenet::sendAliasQuery(humbleNetState.p2pConn.get(), query)) {
 				LOG("Failed to replay alias query \"%s\"\n", query.c_str());
+				auto it = humbleNetState.pendingAliasQueryOut.find(query);
+				if (it != humbleNetState.pendingAliasQueryOut.end()) {
+					auto callback = it->second;
+					humbleNetState.pendingAliasQueryOut.erase(it);
+					HUMBLENET_UNGUARD();
+					callback({});
+				}
 			}
 		}
 	}
 
 	void reconnect_signaling_timer(void* data);
+	void request_signaling_writable_timer(void* data);
 
 	void schedule_signaling_reconnect(const char* reason)
 	{
@@ -137,12 +103,55 @@ namespace {
 		humblenet_signaling_connect();
 	}
 
+	bool queue_signaling_message(humblenet::P2PSignalConnection* conn, const uint8_t* buff, size_t length)
+	{
+		if (length > kMaxSignalingBytes || conn->queuedBytes > kMaxSignalingBytes - length ||
+			conn->sendQueue.size() >= kMaxSignalingMessages) {
+			return false;
+		}
+		conn->sendQueue.emplace_back(buff, buff + length);
+		conn->queuedBytes += length;
+		return true;
+	}
+
+	void schedule_signaling_writable(humblenet::P2PSignalConnection* conn)
+	{
+#ifndef EMSCRIPTEN
+		if (conn->writableWakePending) {
+			return;
+		}
+		conn->writableWakePending = true;
+		uintptr_t generation = static_cast<uintptr_t>(humbleNetState.reconnectGeneration);
+		humblenet_timer(request_signaling_writable_timer, 0, reinterpret_cast<void*>(generation));
+#else
+		internal_request_writable(conn->wsi);
+#endif
+	}
+
+	void request_signaling_writable_timer(void* data)
+	{
+		HUMBLENET_GUARD();
+
+		uintptr_t generation = reinterpret_cast<uintptr_t>(data);
+		if (!humbleNetState.p2pConn ||
+			generation != static_cast<uintptr_t>(humbleNetState.reconnectGeneration)) {
+			return;
+		}
+
+		humblenet::P2PSignalConnection* conn = humbleNetState.p2pConn.get();
+		conn->writableWakePending = false;
+		if (conn->wsi != NULL && !conn->sendQueue.empty()) {
+			internal_request_writable(conn->wsi);
+		}
+	}
+
 	void reset_signaling_connection()
 	{
 		if (humbleNetState.myPeerId != 0) {
 			humbleNetState.reconnectPeerId = humbleNetState.myPeerId;
 		}
 		humbleNetState.myPeerId = 0;
+		internal_alias_on_signaling_reset();
 
 		std::unordered_set<Connection*> inFlightConnections;
 		for (const auto& it : humbleNetState.pendingPeerConnectionsOut) {
@@ -167,6 +176,8 @@ namespace {
 }
 
 ha_bool humblenet_signaling_connect() {
+	HUMBLENET_GUARD();
+
 	using namespace humblenet;
 
 	if (humbleNetState.p2pConn) {
@@ -198,6 +209,14 @@ ha_bool humblenet_signaling_connect() {
 	return true;
 }
 
+void humblenet_signaling_force_reconnect(const char* reason) {
+	if (humbleNetState.p2pConn) {
+		humbleNetState.p2pConn->drop();
+	}
+	reset_signaling_connection();
+	schedule_signaling_reconnect(reason);
+}
+
 namespace humblenet {
 	ha_bool sendP2PMessage(P2PSignalConnection *conn, const uint8_t *buff, size_t length)
 	{
@@ -215,13 +234,21 @@ namespace humblenet {
 			return false;
 		}
 
+#ifndef EMSCRIPTEN
+		if (!queue_signaling_message(conn, buff, length)) {
+			return false;
+		}
+		schedule_signaling_writable(conn);
+		return true;
+#else
 		{
 			HUMBLENET_UNGUARD();
 
 			int ret = internal_write_socket(conn->wsi, (const void*)buff, length );
 
-			return ret == length;
+			return ret == static_cast<int>(length);
 		}
+#endif
 	}
 
 	// called for incoming connections to indicate the connection process is completed.
@@ -343,10 +370,22 @@ namespace humblenet {
 
 		//        LOG("Data: %d -> %s\n", len, std::string((const char*)data,len).c_str());
 
-		conn->recvBuf.insert(conn->recvBuf.end()
-							 , reinterpret_cast<const char *>(data)
-							 , reinterpret_cast<const char *>(data) + len);
-		ha_bool retval = parseMessage(conn->recvBuf, p2pSignalProcess, NULL);
+		if (len < 0 || static_cast<size_t>(len) > kMaxSignalingBytes ||
+			conn->recvBuf.size() > kMaxSignalingBytes - static_cast<size_t>(len)) {
+			conn->recvBuf.clear();
+			reset_signaling_connection();
+			schedule_signaling_reconnect("message too large");
+			return -1;
+		}
+
+		const uint8_t* inBuf = reinterpret_cast<const uint8_t*>(data);
+		conn->recvBuf.insert(conn->recvBuf.end(), inBuf, inBuf + len);
+		if (!internal_websocket_message_complete(s)) {
+			return 0;
+		}
+		std::vector<uint8_t> message;
+		message.swap(conn->recvBuf);
+		ha_bool retval = parseMessage(message, p2pSignalProcess, NULL);
 		if (!retval) {
 			// error while parsing a message, close the connection
 			reset_signaling_connection();
@@ -375,13 +414,15 @@ namespace humblenet {
 			return -1;
 		}
 
-		if (conn->sendBuf.empty()) {
-			// no data in sendBuf
+		conn->writableWakePending = false;
+		if (conn->sendQueue.empty()) {
+			// no data in sendQueue
 			return 0;
 		}
 
-		int retval = internal_write_socket( conn->wsi, &conn->sendBuf[0], conn->sendBuf.size() );
-		if (retval < 0) {
+		std::vector<uint8_t>& message = conn->sendQueue.front();
+		int retval = internal_write_socket(conn->wsi, message.data(), static_cast<int>(message.size()));
+		if (retval != static_cast<int>(message.size())) {
 			// error while sending, close the connection
 			reset_signaling_connection();
 			schedule_signaling_reconnect("write failed");
@@ -389,8 +430,13 @@ namespace humblenet {
 		}
 
 		// successful write
-		conn->sendBuf.erase(conn->sendBuf.begin(), conn->sendBuf.begin() + retval);
+		conn->queuedBytes -= message.size();
+		conn->sendQueue.pop_front();
+		if (!conn->sendQueue.empty()) {
+			internal_request_writable(conn->wsi);
+		}
 
+		internal_alias_retry_deferred_work();
 		return 0;
 	}
 
@@ -410,7 +456,7 @@ namespace humblenet {
 	}
 
 
-	void register_protocol(internal_context_t* context) {
+	bool register_protocol(internal_context_t* context) {
 		internal_callbacks_t callbacks;
 
 		memset(&callbacks, 0, sizeof(callbacks));
@@ -422,7 +468,10 @@ namespace humblenet {
 		callbacks.on_writable = on_writable;
 		callbacks.on_destroy = on_disconnect; // on connection failure to establish we only get a destroy, not a disconnect.
 
-		internal_register_protocol( humbleNetState.context, "humblepeer", &callbacks );
+		bool registered = internal_register_protocol(context, "humblepeer", &callbacks);
+		if (registered)
+			internal_publish_context(context);
+		return registered;
 	}
 }
 
@@ -528,17 +577,13 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 
 			if (previousPeerId != 0 && previousPeerId == peer && hadReconnectToken) {
 				LOG("Signaling resume accepted for peer %u\n", peer);
-				replay_pending_alias_unregistrations();
-				replay_registered_aliases();
-				replay_pending_alias_registrations();
+				internal_alias_on_signaling_ready(false, previousPeerId);
 			} else if (previousPeerId != 0 && previousPeerId != peer) {
 				LOG("Signaling resume rejected, assigned fresh peer id %u (previously %u)\n", peer, previousPeerId);
-				humbleNetState.pendingAliasUnregistrations.clear();
-				humbleNetState.pendingAliasUnregisterAll = false;
-				replay_registered_aliases();
-				replay_pending_alias_registrations();
+				internal_alias_on_signaling_ready(true, previousPeerId);
 			} else {
 				LOG("My peer id is %u\n", peer);
+				internal_alias_on_signaling_ready(false, 0);
 			}
 
 			replay_pending_alias_queries();
@@ -622,13 +667,7 @@ static ha_bool p2pSignalProcess(const humblenet::HumblePeer::Message *msg, void 
 			auto resolved = reinterpret_cast<const HumblePeer::AliasResolved*>(msg->message());
 			std::string alias = resolved->alias()->c_str();
 			PeerId peer = resolved->peerId();
-			bool handledRegistration = internal_alias_handle_registration_resolution(alias, peer);
-
-			if (humbleNetState.pendingAliasConnectionsOut.find(alias) != humbleNetState.pendingAliasConnectionsOut.end()) {
-				internal_alias_resolved_to(alias, peer);
-			} else if (!handledRegistration) {
-				LOG("Got resolve message for alias \"%s\" without a pending lookup\n", alias.c_str());
-			}
+			internal_alias_handle_resolution(alias, peer);
 		}
 			break;
 

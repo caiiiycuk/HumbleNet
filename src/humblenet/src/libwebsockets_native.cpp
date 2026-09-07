@@ -3,7 +3,9 @@
 #include "libwebsockets_native.h"
 
 #include "libpoll.h"
+#include <algorithm>
 #include <cstring>
+#include <mutex>
 
 #include <vector>
 #include <string>
@@ -23,33 +25,69 @@
 #define LOG printf
 
 static_assert(sizeof(lws_pollfd) == sizeof(pollfd), "pollfd struct size mismatch!");
+static lws_callback_function* detachedDelegate;
 
 struct LibWebSocket_Module : public poll_module_t {
 
-	LibWebSocket_Module(lws_protocols* protocols) {
+	LibWebSocket_Module(lws_protocols* protocols)
+	: context(NULL)
+	, protocols(protocols)
+	, delegate(protocols[0].callback)
+	, attached(false) {
 		PreSelect = (poll_pre_select)&OnPreSelect;
 		PostSelect = (poll_post_select)&OnPostSelect;
 		Destroy = (poll_pre_destroy)OnPreDestroy;
+		ParentChain = NULL;
+		ExtraMemoryPtr = NULL;
 
 		// AAAAAIEEEEE!!!
 		assert( protocols[0].callback != &InterceptCallback );
+		detachedDelegate = delegate;
 		
-		this->protocols = protocols;
-		delegate = protocols[0].callback;
 		this->protocols[0].callback = &InterceptCallback;
 	}
 
 	~LibWebSocket_Module() {
+		restoreCallbacks();
+	}
 
+	void attach() {
+		poll_init_with_module(this);
+		attached = true;
+	}
+
+	void setContext(lws_context* value) {
+		std::lock_guard<std::recursive_mutex> lock(lwsMutex);
+		context = value;
+	}
+
+	bool makeInert() {
+		std::lock_guard<std::recursive_mutex> lock(lwsMutex);
+		context = NULL;
+		restoreCallbacks();
+		if (!attached)
+			return false;
+		attached = false;
+		return true;
+	}
+
+	struct lws* connect(lws_client_connect_info* ccinfo) {
+		std::lock_guard<std::recursive_mutex> lock(lwsMutex);
+		return lws_client_connect_via_info(ccinfo);
 	}
 
 	int callback(struct lws_context *context
 						   , struct lws *wsi
 						   , enum lws_callback_reasons reason
 						   , void *user, void *in, size_t len) {
+		std::lock_guard<std::recursive_mutex> lock(lwsMutex);
 		switch (reason) {
 			case LWS_CALLBACK_PROTOCOL_INIT: {
 				this->context = context;
+			} break;
+
+			case LWS_CALLBACK_PROTOCOL_DESTROY: {
+				makeInert();
 			} break;
 
 			case LWS_CALLBACK_ADD_POLL_FD: {
@@ -112,9 +150,26 @@ private:
 	lws_context* context;
 	lws_protocols* protocols;
 	lws_callback_function* delegate;
+	bool attached;
 	std::vector<struct lws_pollfd> pollfds;
+	std::recursive_mutex lwsMutex;
+
+	void restoreCallbacks() {
+		for (lws_protocols* p = protocols; p && p->name; ++p) {
+			if (p->callback == InterceptCallback)
+				p->callback = delegate;
+		}
+	}
 
 	static void OnPreSelect(LibWebSocket_Module* self, fd_set* readset, fd_set* writeset, fd_set* errorset, int* blocktime ) {
+		std::lock_guard<std::recursive_mutex> lock(self->lwsMutex);
+		if (self->context == NULL)
+			return;
+
+		*blocktime = std::min(*blocktime, 1000);
+		if (!lws_service_adjust_timeout(self->context, *blocktime, 0))
+			*blocktime = 0;
+
 		// Add all the websocket FDs.
 
 		for (const auto &pollfd : self->pollfds) {
@@ -129,46 +184,50 @@ private:
 	}
 
 	static void OnPostSelect(LibWebSocket_Module* self, int slct, fd_set* readset, fd_set* writeset, fd_set* errorset) {
-		// If there was nothing triggered, no need to check.
-		if( slct <= 0 )
+		std::lock_guard<std::recursive_mutex> lock(self->lwsMutex);
+		if (self->context == NULL)
 			return;
 
-		// Process all the triggered FDs
-		int retval;
-		for (auto &pollfd : self->pollfds) {
-			if (FD_ISSET(pollfd.fd, readset) || FD_ISSET(pollfd.fd, writeset) || FD_ISSET(pollfd.fd, errorset) ) {
-				pollfd.revents = (FD_ISSET(pollfd.fd, readset) ? LWS_POLLIN : 0)
-				| (FD_ISSET(pollfd.fd, writeset) ? LWS_POLLOUT : 0)
-				| (FD_ISSET(pollfd.fd, errorset) ? LWS_POLLHUP : 0);
-				retval = lws_service_fd(self->context, &pollfd);
-				if (retval < 0) {
-					LOG("error in lws_service_fd: %d\n", retval);
-					// keep going... TODO: should we?
-				} else if (pollfd.revents != 0) {
-					LOG("error: lws_service_fd thinks it's not our socket\n");
+		std::vector<struct lws_pollfd> ready;
+		if (slct > 0) {
+			for (const auto &pollfd : self->pollfds) {
+				if (FD_ISSET(pollfd.fd, readset) || FD_ISSET(pollfd.fd, writeset) || FD_ISSET(pollfd.fd, errorset)) {
+					struct lws_pollfd copy = pollfd;
+					copy.revents = (FD_ISSET(copy.fd, readset) ? LWS_POLLIN : 0)
+						| (FD_ISSET(copy.fd, writeset) ? LWS_POLLOUT : 0)
+						| (FD_ISSET(copy.fd, errorset) ? LWS_POLLHUP : 0);
+					ready.push_back(copy);
 				}
-
-				// if we ve already found that number of matches bail
-				if( --slct <= 0 )
-					break;
 			}
 		}
+
+		int retval;
+		for (auto &pollfd : ready) {
+			retval = lws_service_fd(self->context, &pollfd);
+			if (retval < 0) {
+				LOG("error in lws_service_fd: %d\n", retval);
+			} else if (pollfd.revents != 0) {
+				LOG("error: lws_service_fd thinks it's not our socket\n");
+			}
+		}
+
+		if (self->context != NULL)
+			lws_service_tsi(self->context, -1, 0);
 	}
 
 	static void OnPreDestroy( LibWebSocket_Module* self ) {
-		// replace the original protocol callback
-		for( lws_protocols* p = self->protocols; p && p->name; ++p )
-		{
-			if( p->callback == InterceptCallback )
-				p->callback = self->delegate;
-		}
+		self->~LibWebSocket_Module();
 	}
 
 	static int InterceptCallback(struct lws *wsi
 							 , enum lws_callback_reasons reason
 							 , void *user, void *in, size_t len){
+		if (poll_chain() == NULL)
+			return detachedDelegate ? detachedDelegate(wsi, reason, user, in, len) : 0;
 		struct lws_context *context = lws_get_context(wsi);
 		LibWebSocket_Module* module = (LibWebSocket_Module*)lws_context_user( context );
+		if (module == NULL)
+			return 0;
 
 		return module->callback( context, wsi, reason, user, in, len );
 	}
@@ -180,9 +239,12 @@ static int poll_extension_callback(struct lws_context *context,
 										  enum lws_extension_callback_reasons reason,
 										  void *user, void *in, size_t len)
 {
-	LibWebSocket_Module* module = (LibWebSocket_Module*)lws_context_user( context );
 	if( reason == LWS_EXT_CB_DESTROY ) {
-		poll_destroy_module( module );
+		if (poll_chain() == NULL)
+			return 0;
+		LibWebSocket_Module* module = (LibWebSocket_Module*)lws_context_user( context );
+		if (module != NULL)
+			module->makeInert();
 	}
 
 	return 0;
@@ -197,18 +259,39 @@ static lws_extension poll_extension[] = {
 struct lws_context* lws_create_context_extended( lws_context_creation_info* info ) {
 	assert( info->user == NULL );
 
-	LibWebSocket_Module* module = new (malloc(sizeof(LibWebSocket_Module))) LibWebSocket_Module(const_cast<lws_protocols*>(info->protocols));
+	void* storage = malloc(sizeof(LibWebSocket_Module));
+	if (storage == NULL)
+		return NULL;
+	LibWebSocket_Module* module = new (storage) LibWebSocket_Module(const_cast<lws_protocols*>(info->protocols));
 	info->user = module;
 	// hook in our default protocol handler (will delegate to the user provided)
 #if !defined(LWS_WITHOUT_EXTENSIONS)
 	info->extensions = poll_extension;
 #endif
 
-	// insert into poll chain...
-	poll_init();
-	poll_add_module( module );
+	lws_context* context = lws_create_context(info);
+	if (context == NULL) {
+		info->user = NULL;
+		module->~LibWebSocket_Module();
+		free(module);
+		return NULL;
+	}
 
-	return lws_create_context(info);
+	module->setContext(context);
+	module->attach();
+	return context;
+}
+
+void lws_context_destroy_extended(struct lws_context* context) {
+	if (context == NULL)
+		return;
+	LibWebSocket_Module* module = poll_chain() == NULL
+		? NULL
+		: static_cast<LibWebSocket_Module*>(lws_context_user(context));
+	bool destroyModule = module != NULL && module->makeInert();
+	lws_context_destroy(context);
+	if (destroyModule)
+		poll_destroy_module(module);
 }
 
 
@@ -298,7 +381,8 @@ struct lws* lws_client_connect_extended(struct lws_context* context, const char*
 	};
 
 	// Establish the connection
-	return lws_client_connect_via_info(&ccinfo);
+	LibWebSocket_Module* module = (LibWebSocket_Module*)lws_context_user(context);
+	return module != NULL ? module->connect(&ccinfo) : lws_client_connect_via_info(&ccinfo);
 }
 
 #endif

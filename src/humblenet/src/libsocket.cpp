@@ -1,15 +1,21 @@
 #include "libsocket.h"
 
 #include <map>
+#include <condition_variable>
+#include <chrono>
+#include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 #include <cassert>
+#include <atomic>
 #include <cstring>
 
 #ifdef EMSCRIPTEN
 #include "libwebsockets_asmjs.h"
 #else
 #include "libwebsockets_native.h"	// SKIP_AMALGAMATOR_INCLUDE
+#include "libpoll.h"			// SKIP_AMALGAMATOR_INCLUDE
 #include "cert_pem.h"				// SKIP_AMALGAMATOR_INCLUDE
 #include <openssl/ssl.h>
 #endif
@@ -21,14 +27,22 @@
 // TODO: should have a way to disable this on release builds
 #define LOG printf
 
+#ifndef EMSCRIPTEN
+static const lws_retry_bo_t websocket_retry_policy = {
+	NULL, 0, 0, 30, 100, 0
+};
+#endif
+
 struct internal_socket_t {
 	bool owner;
 	bool closing;			// if this is set, ignore close attempts as the close process has already been initiated.
 	void* user_data;
+	struct internal_context_t* context;
 	internal_callbacks_t callbacks;
 	
 	// web socket connection info
 	struct lws *wsi;
+	bool websocket_established;
 	std::string url;
 	
 	// webrtc connection info
@@ -39,7 +53,9 @@ struct internal_socket_t {
 	:owner(owner)
 	,closing(false)
 	,user_data(NULL)
+	,context(NULL)
 	,wsi(NULL)
+	,websocket_established(false)
 	,webrtc(NULL)
 	,webrtc_channel(NULL)
 	{}
@@ -50,6 +66,17 @@ struct internal_socket_t {
 };
 
 struct internal_context_t {
+	internal_context_t()
+	: callbacks()
+	, websocket(NULL)
+	, webrtc(NULL)
+#ifndef EMSCRIPTEN
+	, shuttingDown(false)
+	, shutdownComplete(false)
+	, suppressWebSocketCallbacks(false)
+#endif
+	{}
+
 	internal_callbacks_t callbacks;
 	
 	std::map<std::string,internal_callbacks_t> protocols;
@@ -59,9 +86,44 @@ struct internal_context_t {
 
 	// webrtc
 	struct libwebrtc_context* webrtc;
+
+#ifndef EMSCRIPTEN
+	std::mutex shutdownMutex;
+	std::condition_variable shutdownCondition;
+	std::set<internal_socket_t*> websockets;
+	bool shuttingDown;
+	bool shutdownComplete;
+	std::atomic<bool> suppressWebSocketCallbacks;
+#endif
 };
 
 static internal_context_t* g_context;
+
+static bool websocket_callbacks_suppressed(internal_socket_t* socket)
+{
+#ifdef EMSCRIPTEN
+	return false;
+#else
+	return socket != NULL && socket->context != NULL &&
+		socket->context->suppressWebSocketCallbacks.load();
+#endif
+}
+
+#ifndef EMSCRIPTEN
+static void internal_shutdown_step(void* data);
+
+static void websocket_destroyed(internal_context_t* context, internal_socket_t* socket)
+{
+	bool continueShutdown = false;
+	{
+		std::lock_guard<std::mutex> lock(context->shutdownMutex);
+		context->websockets.erase(socket);
+		continueShutdown = context->shuttingDown && context->websockets.empty();
+	}
+	if (continueShutdown && poll_chain() != NULL)
+		poll_dispatch(internal_shutdown_step, context);
+}
+#endif
 
 int websocket_protocol(  struct lws *wsi
 					   , enum lws_callback_reasons reason
@@ -76,11 +138,24 @@ int websocket_protocol(  struct lws *wsi
 	switch (reason) {
 		case LWS_CALLBACK_WSI_CREATE: {
 			socket->wsi = wsi;
+#ifndef EMSCRIPTEN
+			if (socket->context != NULL) {
+				std::lock_guard<std::mutex> lock(socket->context->shutdownMutex);
+				socket->context->websockets.insert(socket);
+			}
+#endif
 		}
 		break;
 
 		case LWS_CALLBACK_WSI_DESTROY: {
-			ret = socket->callbacks.on_destroy( socket, socket->user_data );
+			internal_context_t* context = socket->context;
+			socket->wsi = NULL;
+			if (!websocket_callbacks_suppressed(socket))
+				ret = socket->callbacks.on_destroy( socket, socket->user_data );
+#ifndef EMSCRIPTEN
+			if (context != NULL)
+				websocket_destroyed(context, socket);
+#endif
 			if( socket->owner )
 				delete socket;
 		}
@@ -89,33 +164,42 @@ int websocket_protocol(  struct lws *wsi
 		case LWS_CALLBACK_CLIENT_CONNECTION_ERROR: {
 			if( socket ) {
 				socket->closing = true;
-				ret = socket->callbacks.on_disconnect( socket, socket->user_data );
+				socket->websocket_established = false;
+				if (!websocket_callbacks_suppressed(socket))
+					ret = socket->callbacks.on_disconnect( socket, socket->user_data );
 			}
 		} break;
 			
 		case LWS_CALLBACK_ESTABLISHED:
 		{
-			ret = socket->callbacks.on_accept( socket, socket->user_data );
+			socket->websocket_established = true;
+			if (!websocket_callbacks_suppressed(socket))
+				ret = socket->callbacks.on_accept( socket, socket->user_data );
 		}
 		break;
 			
 		case LWS_CALLBACK_CLIENT_ESTABLISHED:
 		{
-			 ret = socket->callbacks.on_connect( socket, socket->user_data );
+			socket->websocket_established = true;
+			if (!websocket_callbacks_suppressed(socket))
+				ret = socket->callbacks.on_connect( socket, socket->user_data );
 		}
 		break;
 			
 		case LWS_CALLBACK_CLOSED:
 		{
 			socket->closing = true;
-			ret = socket->callbacks.on_disconnect( socket, socket->user_data );
+			socket->websocket_established = false;
+			if (!websocket_callbacks_suppressed(socket))
+				ret = socket->callbacks.on_disconnect( socket, socket->user_data );
 		}
 		break;
 			
 		case LWS_CALLBACK_RECEIVE:
 		case LWS_CALLBACK_CLIENT_RECEIVE:
 		{
-			ret = socket->callbacks.on_data( socket, in, len, socket->user_data );
+			if (!websocket_callbacks_suppressed(socket))
+				ret = socket->callbacks.on_data( socket, in, len, socket->user_data );
 		}
 		break;
 			
@@ -136,7 +220,8 @@ int websocket_protocol(  struct lws *wsi
 			if (socket->closing && socket->wsi) {
 				return -1;
 			}
-			ret = socket->callbacks.on_writable( socket, socket->user_data );
+			if (!websocket_callbacks_suppressed(socket))
+				ret = socket->callbacks.on_writable( socket, socket->user_data );
 		}
 		break;
 
@@ -175,6 +260,9 @@ int websocket_protocol(  struct lws *wsi
 				X509_free(x);
 				x = NULL;
 			}
+			if (x != NULL)
+				X509_free(x);
+			BIO_free(in);
 		}
 			break;
 #endif
@@ -301,6 +389,9 @@ internal_context_t* internal_init(internal_callbacks_t* callbacks) {
 #else
 	info.options = 0;
 #endif
+#ifndef EMSCRIPTEN
+	info.retry_and_idle_policy = &websocket_retry_policy;
+#endif
 #if 0
 #if defined __APPLE__ || defined(__linux__)
 	// test a few wll known locations
@@ -317,11 +408,36 @@ internal_context_t* internal_init(internal_callbacks_t* callbacks) {
 #endif
 
 	ctx->websocket = lws_create_context_extended(&info);
+	if (ctx->websocket == NULL) {
+		delete ctx;
+		return NULL;
+	}
 	ctx->webrtc = libwebrtc_create_context(&webrtc_protocol);
+	if (ctx->webrtc == NULL) {
+		lws_context* websocket = ctx->websocket;
+		ctx->websocket = NULL;
+		if (websocket != NULL)
+#ifdef EMSCRIPTEN
+			lws_context_destroy(websocket);
+#else
+			lws_context_destroy_extended(websocket);
+#endif
+#ifndef EMSCRIPTEN
+		poll_deinit();
+#endif
+		delete ctx;
+		return NULL;
+	}
 
-	g_context = ctx;
+#ifndef EMSCRIPTEN
+	poll_start();
+#endif
 
 	return ctx;
+}
+
+void internal_publish_context(internal_context_t* ctx) {
+	g_context = ctx;
 }
 
 bool internal_supports_webRTC(internal_context_t* ctx) {
@@ -359,7 +475,10 @@ void internal_set_callbacks(internal_socket_t* socket, internal_callbacks_t* cal
 	}
 }
 
-void internal_register_protocol( internal_context_t* ctx, const char* name, internal_callbacks_t* callbacks ) {
+bool internal_register_protocol( internal_context_t* ctx, const char* name, internal_callbacks_t* callbacks ) {
+	if (ctx == NULL || name == NULL || callbacks == NULL || ctx->protocols.size() + 2 > MAX_PROTOCOLS)
+		return false;
+
 	internal_callbacks_t cb = *callbacks;
 	sanitize_callbacks( cb );
 
@@ -373,15 +492,92 @@ void internal_register_protocol( internal_context_t* ctx, const char* name, inte
 	*protocol = *(protocol-1);
 	// and update the name
 	protocol->name = name;
+	return true;
 }
 
-void internal_deinit(internal_context_t* ctx) {
-	// how to destroy connection factory
-	if (!ctx) return;
+#ifndef EMSCRIPTEN
+static void internal_shutdown_step(void* data)
+{
+	internal_context_t* ctx = static_cast<internal_context_t*>(data);
+	libwebrtc_context* webrtc = NULL;
+	lws_context* websocket = NULL;
+	std::vector<internal_socket_t*> sockets;
 
-	lws_context_destroy( ctx->websocket );
-	if( ctx->webrtc )
-		libwebrtc_destroy_context( ctx->webrtc );
+	{
+		std::lock_guard<std::mutex> lock(ctx->shutdownMutex);
+		if (ctx->shutdownComplete)
+			return;
+		webrtc = ctx->webrtc;
+		ctx->webrtc = NULL;
+		sockets.assign(ctx->websockets.begin(), ctx->websockets.end());
+		if (sockets.empty()) {
+			websocket = ctx->websocket;
+			ctx->websocket = NULL;
+		}
+	}
+
+	if (webrtc != NULL)
+		libwebrtc_destroy_context(webrtc);
+
+	if (!sockets.empty()) {
+		for (internal_socket_t* socket : sockets)
+			internal_close_socket(socket);
+		return;
+	}
+
+	if (websocket != NULL)
+		lws_context_destroy_extended(websocket);
+
+	{
+		std::lock_guard<std::mutex> lock(ctx->shutdownMutex);
+		ctx->shutdownComplete = true;
+	}
+	ctx->shutdownCondition.notify_all();
+}
+#endif
+
+void internal_deinit(internal_context_t* ctx) {
+	if (!ctx) return;
+	if (g_context == ctx)
+		g_context = NULL;
+
+#ifdef EMSCRIPTEN
+	lws_context_destroy(ctx->websocket);
+	libwebrtc_destroy_context(ctx->webrtc);
+#else
+	{
+		std::lock_guard<std::mutex> lock(ctx->shutdownMutex);
+		ctx->shuttingDown = true;
+	}
+	if (poll_chain() != NULL)
+		poll_dispatch(internal_shutdown_step, ctx);
+	else
+		internal_shutdown_step(ctx);
+
+	std::unique_lock<std::mutex> lock(ctx->shutdownMutex);
+	bool shutdownComplete = ctx->shutdownCondition.wait_for(
+		lock, std::chrono::seconds(2), [ctx] { return ctx->shutdownComplete; });
+	libwebrtc_context* webrtc = NULL;
+	if (!shutdownComplete) {
+		LOG("Timed out waiting for graceful websocket shutdown\n");
+		ctx->shutdownComplete = true;
+		ctx->suppressWebSocketCallbacks.store(true);
+		webrtc = ctx->webrtc;
+		ctx->webrtc = NULL;
+	}
+	lws_context* websocket = ctx->websocket;
+	ctx->websocket = NULL;
+	lock.unlock();
+	if (!shutdownComplete) {
+		if (webrtc != NULL)
+			libwebrtc_destroy_context(webrtc);
+		poll_deinit();
+		if (websocket != NULL)
+			lws_context_destroy_extended(websocket);
+	} else {
+		poll_deinit();
+	}
+#endif
 
 	delete ctx;
 }
@@ -395,17 +591,24 @@ void * internal_get_data(internal_socket_t* socket ) {
 }
 
 internal_socket_t* internal_connect_websocket( const char *server_addr, const char* protocol ) {
-	internal_socket_t* socket = new internal_socket_t(true);
+	std::map<std::string, internal_callbacks_t>::iterator it = g_context->protocols.find( protocol );
+	if (it == g_context->protocols.end())
+		return NULL;
 
-	socket->wsi = lws_client_connect_extended(g_context->websocket, server_addr, protocol, socket );
-	if (socket->wsi == NULL) {
+	internal_socket_t* socket = new internal_socket_t(false);
+	socket->context = g_context;
+	socket->callbacks = it->second;
+	socket->url = server_addr;
+
+	struct lws* wsi = lws_client_connect_extended(g_context->websocket, server_addr, protocol, socket );
+	socket->owner = true;
+	if (wsi == NULL) {
 		delete socket;
 		return NULL;
 	}
-
-	socket->callbacks = g_context->protocols.find( protocol )->second;
-
-	socket->url = server_addr;
+#ifdef EMSCRIPTEN
+	socket->wsi = wsi;
+#endif
 
 	return socket;
 }
@@ -415,6 +618,7 @@ internal_socket_t* internal_create_webrtc(internal_context_t* ctx) {
 		return NULL;
 
 	internal_socket_t* socket = new internal_socket_t(true);
+	socket->context = ctx;
 
 	socket->webrtc = libwebrtc_create_connection_extended( ctx->webrtc, socket );
 	socket->callbacks = ctx->callbacks;
@@ -476,15 +680,39 @@ void internal_close_socket( internal_socket_t* socket ) {
 	else if( socket->wsi ) {
 		socket->closing = true;
 #ifndef EMSCRIPTEN
-		lws_close_reason(socket->wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0);
-#endif
+		if (socket->websocket_established) {
+			lws_close_reason(socket->wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0);
+			lws_callback_on_writable(socket->wsi);
+		} else {
+			lws_set_timeout(socket->wsi, PENDING_TIMEOUT_USER_OK, LWS_TO_KILL_ASYNC);
+		}
+#else
 		lws_callback_on_writable(socket->wsi);
+#endif
 	} else if( socket->webrtc ) {
 		// this will trigger the destruction of the channel and thus the destruction of our socket object.
 		socket->closing = true;
 		libwebrtc_close_connection( socket->webrtc );
 	} else {
 		assert( "Destroyed socket passed to close" == NULL );
+	}
+}
+
+void internal_abort_socket( internal_socket_t* socket ) {
+	if( socket->closing )
+		return;
+	else if( socket->wsi ) {
+		socket->closing = true;
+#ifndef EMSCRIPTEN
+		lws_set_timeout(socket->wsi, PENDING_TIMEOUT_USER_OK, LWS_TO_KILL_ASYNC);
+#else
+		lws_callback_on_writable(socket->wsi);
+#endif
+	} else if( socket->webrtc ) {
+		socket->closing = true;
+		libwebrtc_close_connection( socket->webrtc );
+	} else {
+		assert( "Destroyed socket passed to abort" == NULL );
 	}
 }
 
@@ -516,4 +744,21 @@ int internal_write_socket(internal_socket_t* socket, const void *buf, int bufsiz
 
 	// bad/disconnected socket
 	return -1;
+}
+
+void internal_request_writable(internal_socket_t* socket)
+{
+	if (socket != NULL && socket->wsi != NULL)
+		lws_callback_on_writable(socket->wsi);
+}
+
+int internal_websocket_message_complete(internal_socket_t* socket)
+{
+#ifndef EMSCRIPTEN
+	if (socket != NULL && socket->wsi != NULL) {
+		return lws_remaining_packet_payload(socket->wsi) == 0 &&
+			lws_is_final_fragment(socket->wsi);
+	}
+#endif
+	return 1;
 }
