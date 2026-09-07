@@ -318,10 +318,14 @@ namespace {
 		PeerId previousPeerId = oldOwner->second;
 		humbleNetState.oldSessionAliasOwners.erase(oldOwner);
 
-		if (peer == 0) {
+		if (peer == 0 || peer == previousPeerId) {
 			if (humbleNetState.desiredAliases.find(alias) != humbleNetState.desiredAliases.end() &&
 				humbleNetState.sessionAliases.find(alias) == humbleNetState.sessionAliases.end() &&
 				humbleNetState.pendingAliasRegistrations.find(alias) == humbleNetState.pendingAliasRegistrations.end()) {
+				if (peer == previousPeerId) {
+					LOG("Alias \"%s\" still resolves to previous peer %u; attempting takeover\n",
+						alias.c_str(), previousPeerId);
+				}
 				if (!send_alias_register_once(alias)) {
 					humbleNetState.aliasWorkDeferred = true;
 				}
@@ -395,11 +399,10 @@ namespace {
 
 		humbleNetState.confirmedAliases.erase(alias);
 
-		if (humbleNetState.sessionAliases.find(alias) != humbleNetState.sessionAliases.end()) {
+		if (humbleNetState.sessionAliases.erase(alias) > 0) {
 			humbleNetState.pendingAliasRegistrations.erase(alias);
 			LOG("Alias \"%s\" no longer resolves to this peer (resolved to %u)\n",
 				alias.c_str(), peer);
-			return;
 		}
 
 		if (peer == 0) {
